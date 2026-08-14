@@ -1,0 +1,204 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+}
+
+.hero {
+  padding-top: var(--s8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+.title {
+  font-size: var(--fs-display);
+}
+
+.lede {
+  max-width: 58ch;
+  font-size: 1.0625rem;
+  color: var(--ink-muted);
+  line-height: 1.6;
+}
+
+/* The dropzone is a paper card with an inset rule — a bookplate rather than the
+   usual bare dashed rectangle. */
+.dropzone {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  padding: var(--s3);
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+
+.dragging {
+  border-color: var(--clay);
+  background: var(--clay-wash);
+  box-shadow: var(--shadow-lift);
+}
+
+.busy {
+  border-color: var(--rule-strong);
+}
+
+.plate {
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--r-sm);
+  min-height: 132px;
+  display: grid;
+  place-items: center;
+  padding: var(--s5) var(--s4);
+  transition: border-color var(--dur-fast) var(--ease);
+}
+
+.dragging .plate {
+  border-color: var(--clay);
+  border-style: solid;
+}
+
+.prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+  background: none;
+  border: 0;
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-sm);
+  text-align: center;
+}
+
+.promptTitle {
+  font-family: var(--font-book);
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+}
+
+.promptHint {
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
+}
+
+.chosen,
+.analysing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+  text-align: center;
+  width: 100%;
+}
+
+.chosenName,
+.analysingName {
+  font-family: var(--font-book);
+  font-size: 1.125rem;
+  word-break: break-word;
+}
+
+.chosenSize {
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+}
+
+.analysingNote {
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+}
+
+.analysingHint {
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+  max-width: 40ch;
+}
+
+/* Indeterminate: the server gives no progress while it parses, so this says
+   "working" without implying a position. */
+.shimmer {
+  width: min(280px, 70%);
+  height: 3px;
+  border-radius: var(--r-pill);
+  background: var(--paper-sunken);
+  overflow: hidden;
+  position: relative;
+  margin: var(--s2) 0;
+}
+
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--clay);
+  animation: slide 1.2s var(--ease) infinite;
+}
+
+@keyframes slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+/* Languages */
+
+.languages {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: var(--s4);
+}
+
+.arrow {
+  padding-bottom: 12px;
+  color: var(--ink-faint);
+  font-size: 1.125rem;
+}
+
+@media (max-width: 560px) {
+  .languages {
+    grid-template-columns: 1fr;
+  }
+
+  .arrow {
+    display: none;
+  }
+}
+
+/* Settings */
+
+.settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--s5);
+}
+
+/* Actions */
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  padding-bottom: var(--s8);
+}
+
+.actionsNote {
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+}

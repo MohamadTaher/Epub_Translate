@@ -1,0 +1,85 @@
+/*
+ * The design system, in one place.
+ *
+ * Editorial rather than technical: warm paper, book typography, one accent. The
+ * contrast ratio beside each colour is measured against --paper, and everything
+ * used for body-size text clears 4.5:1.
+ *
+ * Only light is defined today. Every colour below is referenced through its
+ * custom property, so a dark theme is a second block here rather than a rewrite.
+ */
+
+:root {
+  /* Surfaces */
+  --paper: #faf7f1;
+  --paper-sunken: #f2ede3;
+  --surface: #ffffff;
+  --rule: #e4ddd1;
+  --rule-strong: #cfc5b4;
+
+  /* Text */
+  --ink: #1c1917;          /* 15.0:1 */
+  --ink-muted: #6b6259;    /*  5.6:1 */
+  --ink-faint: #8a8076;    /*  3.6:1 — meta and decoration only, never body text */
+
+  /* Accent: fill and text both, 5.35:1 on paper and 5.7:1 under white */
+  --clay: #a64b31;
+  --clay-deep: #8a3b26;
+  --clay-wash: #f7ebe6;
+
+  /* Status. Clay and crimson are close in hue, so these never carry meaning
+     alone — every use is paired with a label or an accessible name. */
+  --sage: #4f6b52;         /* 5.5:1 */
+  --sage-wash: #eaf0ea;
+  --amber: #8a5f1b;        /* 5.3:1 */
+  --amber-wash: #f6eedf;
+  --crimson: #a02a22;      /* 6.9:1 */
+  --crimson-wash: #f8e7e4;
+
+  /* Type */
+  --font-book: 'Literata Variable', 'Literata', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+
+  --fs-display: clamp(2.25rem, 1.6rem + 2.2vw, 3.5rem);
+  --fs-h2: clamp(1.375rem, 1.2rem + 0.7vw, 1.75rem);
+  --fs-h3: 1.125rem;
+  --fs-body: 1rem;
+  --fs-sm: 0.875rem;
+  --fs-xs: 0.75rem;
+
+  /* Space, on a 4px scale */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  --s8: 64px;
+  --s9: 96px;
+
+  /* Shape */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.05), 0 12px 28px -18px rgba(28, 25, 23, 0.18);
+  --shadow-lift: 0 2px 4px rgba(28, 25, 23, 0.06), 0 18px 40px -20px rgba(28, 25, 23, 0.24);
+
+  /* Measure */
+  --page-max: 1120px;
+  --column-max: 880px;
+  --measure: 68ch;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --dur-fast: 140ms;
+  --dur-panel: 220ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-panel: 0ms;
+  }
+}

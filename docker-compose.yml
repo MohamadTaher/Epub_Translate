@@ -1,0 +1,15 @@
+services:
+  epub-translate:
+    build: .
+    ports:
+      - "7860:7860"
+    volumes:
+      # Mounted rather than copied in, so the key never lands in the image.
+      # python-dotenv reads it, which keeps .env parsed the same way here as it
+      # is for the CLI.
+      - ./.env:/app/.env:ro
+      # Keeps the daily spend counter across restarts.
+      - epub-data:/data
+
+volumes:
+  epub-data:

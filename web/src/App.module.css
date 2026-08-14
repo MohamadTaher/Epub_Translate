@@ -1,0 +1,36 @@
+.app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 0 var(--s5);
+}
+
+.notice {
+  padding-top: var(--s6);
+}
+
+.footer {
+  border-top: 1px solid var(--rule);
+  margin-top: var(--s8);
+}
+
+/* The inner block is what carries the reading measure; the outer one keeps the
+   text on the same left edge as the content above it. */
+.footer > div {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--s5);
+}
+
+.footer p {
+  max-width: var(--measure);
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+}

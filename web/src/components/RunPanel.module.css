@@ -1,0 +1,149 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+  padding-bottom: var(--s8);
+}
+
+/* Sticky run header: the book, the progress and the two controls stay put while
+   the chapter list and log scroll. */
+
+.sticky {
+  position: sticky;
+  top: 64px;
+  z-index: 10;
+  margin: 0 calc(var(--s5) * -1);
+  padding: var(--s4) var(--s5);
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+}
+
+.stickyInner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 1.2fr) auto;
+  align-items: center;
+  gap: var(--s5);
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.progressLine {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+}
+
+.progressLine strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.eta {
+  color: var(--ink-faint);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.controls {
+  display: flex;
+  gap: var(--s2);
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .stickyInner {
+    grid-template-columns: 1fr;
+    gap: var(--s4);
+  }
+
+  .controls {
+    justify-content: flex-start;
+  }
+}
+
+/* Waiting notice */
+
+.waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-sm);
+  background: var(--amber-wash);
+  color: var(--amber);
+  font-size: var(--fs-sm);
+}
+
+.waitingGlyph {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* Two columns: the log never pushes the chapters off screen. */
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s5);
+  align-items: start;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.columnHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.columnMeta {
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+}
+
+.logCollapsed {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+
+  /* On a narrow screen the log collapses so the chapters stay in view. */
+  .logWrap {
+    display: none;
+  }
+
+  .logCollapsed {
+    display: block;
+  }
+
+  .logCollapsed > summary {
+    padding: var(--s3) 0;
+    color: var(--clay);
+    font-size: var(--fs-sm);
+    cursor: pointer;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .column:last-child .columnHead {
+    display: none;
+  }
+}

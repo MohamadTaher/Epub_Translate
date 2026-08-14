@@ -1,0 +1,104 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  padding: var(--s7) 0 var(--s8);
+}
+
+.startOver {
+  align-self: flex-start;
+  margin-top: var(--s2);
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--clay);
+  font-size: var(--fs-xs);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Stats */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--s5);
+  padding: var(--s5) 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+/* The request count is the number that moves as chapters are ticked, so it
+   dims briefly rather than jumping to a stale value. */
+.recalculating {
+  opacity: 0.4;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+/* Budget */
+
+.budget {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.budgetLine {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s4);
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+  flex-wrap: wrap;
+}
+
+.budgetLine strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.budgetRight {
+  color: var(--ink-faint);
+}
+
+.budgetWarning {
+  font-size: var(--fs-sm);
+  color: var(--crimson);
+  max-width: var(--measure);
+}
+
+/* Sections */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s4);
+  flex-wrap: wrap;
+}
+
+.sectionMeta {
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+}
+
+/* Actions */
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  padding-top: var(--s2);
+}
+
+.actionsNote {
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+}
