@@ -1,0 +1,27 @@
+# Local development. Compose merges this into docker-compose.yml automatically,
+# so plain `docker compose up` runs the code in this directory rather than a copy
+# of it taken when the image was last built.
+#
+# To run what would actually be deployed — the image with the code baked in —
+# skip this file:
+#
+#   docker compose -f docker-compose.yml up --build
+#
+# The image is still needed for the things a bind mount can't provide: the
+# installed Python packages and the tokenizer fetched at build time. Rebuild it
+# only when those change (`requirements.txt`), not when code does.
+services:
+  epub-translate:
+    volumes:
+      # The working tree, over the copy baked into the image. `.env` is still
+      # mounted read-only by the base file; a nested mount wins over this one.
+      - .:/app
+    # Restarts on any .py change. Watching is limited to the two Python packages
+    # so a frontend build — which writes a few hundred files into web/dist —
+    # doesn't restart the server it is being served by.
+    #
+    # A reload drops jobs in flight: they live in one process's memory, so an
+    # edit mid-run ends that run. And if an edit ever stops being noticed, this
+    # host's file events are the reason; `WATCHFILES_FORCE_POLLING=true` in the
+    # environment makes watchfiles look for itself instead of being told.
+    command: uvicorn server.app:app --host 0.0.0.0 --port 7860 --reload --reload-dir /app/epub_translate --reload-dir /app/server

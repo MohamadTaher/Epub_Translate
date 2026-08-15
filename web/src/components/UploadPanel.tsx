@@ -1,17 +1,10 @@
 import { useId, useRef, useState } from 'react';
-import { fileSize, languageLabel } from '../format';
-import type { Status } from '../types';
-import { Button, Callout, Field } from './ui';
+import { DEFAULT_MAX_UPLOAD_MB } from '@/constants';
+import { fileSize, languageLabel } from '@/format';
+import { describeBlock } from '@/notices';
+import type { Status, UploadSettings } from '@/types';
+import { Button, Callout, Field, NoticeCallout } from './ui';
 import styles from './UploadPanel.module.css';
-
-/**
- * Language is the only thing a visitor chooses. Pace and batch size are the
- * server owner's to set in .env, since it is their quota being spent.
- */
-export interface UploadSettings {
-  source_lang: string;
-  target_lang: string;
-}
 
 interface Props {
   status: Status | null;
@@ -41,7 +34,8 @@ export function UploadPanel({
   const targetId = useId();
   const listId = useId();
 
-  const maxBytes = (status?.max_upload_mb ?? 25) * 1024 * 1024;
+  const maxUploadMb = status?.max_upload_mb ?? DEFAULT_MAX_UPLOAD_MB;
+  const maxBytes = maxUploadMb * 1024 * 1024;
 
   function accept(candidate: File | undefined) {
     if (!candidate) return;
@@ -53,9 +47,7 @@ export function UploadPanel({
       return;
     }
     if (candidate.size > maxBytes) {
-      setLocalError(
-        `That file is ${fileSize(candidate.size)}, over the ${status?.max_upload_mb ?? 25} MB limit.`,
-      );
+      setLocalError(`That file is ${fileSize(candidate.size)}, over the ${maxUploadMb} MB limit.`);
       return;
     }
     setLocalError(null);
@@ -76,9 +68,7 @@ export function UploadPanel({
       </div>
 
       {blocked ? (
-        <Callout tone={blocked.tone} title={blocked.title}>
-          {blocked.body}
-        </Callout>
+        <NoticeCallout notice={blocked} />
       ) : (
         <>
           <div
@@ -117,7 +107,7 @@ export function UploadPanel({
               ) : (
                 <button className={styles.prompt} onClick={() => inputRef.current?.click()} type="button">
                   <span className={styles.promptTitle}>Drop an EPUB here, or browse</span>
-                  <span className={styles.promptHint}>up to {status?.max_upload_mb ?? 25} MB</span>
+                  <span className={styles.promptHint}>up to {maxUploadMb} MB</span>
                 </button>
               )}
             </div>
@@ -190,41 +180,3 @@ export function UploadPanel({
   );
 }
 
-function describeBlock(status: Status | null) {
-  if (!status) return null;
-
-  if (!status.configured) {
-    return {
-      tone: 'error' as const,
-      title: 'This server has no API key',
-      body: 'Translation needs a Gemini API key in the server’s .env file. Nothing can be uploaded until one is set.',
-    };
-  }
-
-  if (status.cooldown_seconds > 0) {
-    const minutes = Math.ceil(status.cooldown_seconds / 60);
-    return {
-      tone: 'warning' as const,
-      title: 'You started a translation recently',
-      body: `You can start another in about ${minutes} minute${minutes === 1 ? '' : 's'}. This limit keeps one visitor from spending the whole day’s budget.`,
-    };
-  }
-
-  if (status.busy) {
-    return {
-      tone: 'warning' as const,
-      title: 'The server is busy',
-      body: 'Other translations are running right now. Try again in a few minutes.',
-    };
-  }
-
-  if (status.remaining_requests <= 0) {
-    return {
-      tone: 'warning' as const,
-      title: 'Today’s budget is spent',
-      body: 'The daily request budget resets at midnight UTC.',
-    };
-  }
-
-  return null;
-}

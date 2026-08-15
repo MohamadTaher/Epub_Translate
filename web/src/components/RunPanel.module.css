@@ -115,7 +115,9 @@
   color: var(--ink-faint);
 }
 
-.logCollapsed {
+/* Wide: the column head names the log, so its own summary is redundant. The
+   element stays a <details>, held open from RunPanel. */
+.logSummary {
   display: none;
 }
 
@@ -124,23 +126,16 @@
     grid-template-columns: 1fr;
   }
 
-  /* On a narrow screen the log collapses so the chapters stay in view. */
-  .logWrap {
-    display: none;
-  }
-
-  .logCollapsed {
-    display: block;
-  }
-
-  .logCollapsed > summary {
+  /* On a narrow screen the log collapses so the chapters stay in view, and the
+     summary takes over from the column head. */
+  .logSummary {
+    display: flex;
+    align-items: center;
     padding: var(--s3) 0;
     color: var(--clay);
     font-size: var(--fs-sm);
     cursor: pointer;
     min-height: 44px;
-    display: flex;
-    align-items: center;
   }
 
   .column:last-child .columnHead {

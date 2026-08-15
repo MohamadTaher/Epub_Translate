@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import type { JobEvent } from '../types';
+import { LOG_NEAR_BOTTOM_PX } from '@/constants';
+import type { JobEvent } from '@/types';
 import styles from './ActivityLog.module.css';
 
 /**
@@ -18,7 +19,8 @@ export function ActivityLog({ events }: { events: JobEvent[] }) {
     if (!scroller) return;
 
     // Only follow along if the reader hasn't scrolled up to look at something.
-    const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+    const nearBottom =
+      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < LOG_NEAR_BOTTOM_PX;
     if (nearBottom) endRef.current?.scrollIntoView({ block: 'end' });
   }, [events.length]);
 

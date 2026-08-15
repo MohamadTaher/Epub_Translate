@@ -1,32 +1,30 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
+import type { Notice, Tone } from '@/notices';
 import styles from './ui.module.css';
 
+type Variant = 'primary' | 'secondary' | 'quiet' | 'danger';
+type Size = 'md' | 'sm';
+
+const buttonClass = (variant: Variant, size: Size, className?: string) =>
+  [styles.button, styles[variant], styles[size], className].filter(Boolean).join(' ');
+
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'quiet' | 'danger';
-  size?: 'md' | 'sm';
+  variant?: Variant;
+  size?: Size;
 };
 
 export function Button({ variant = 'secondary', size = 'md', className, ...rest }: ButtonProps) {
-  return (
-    <button
-      className={[styles.button, styles[variant], styles[size], className].filter(Boolean).join(' ')}
-      {...rest}
-    />
-  );
+  return <button className={buttonClass(variant, size, className)} {...rest} />;
 }
 
-export function LinkButton({
-  variant = 'secondary',
-  size = 'md',
-  className,
-  ...rest
-}: React.AnchorHTMLAttributes<HTMLAnchorElement> & { variant?: 'primary' | 'secondary'; size?: 'md' | 'sm' }) {
-  return (
-    <a
-      className={[styles.button, styles[variant], styles[size], className].filter(Boolean).join(' ')}
-      {...rest}
-    />
-  );
+type LinkButtonProps = AnchorHTMLAttributes<HTMLAnchorElement> & {
+  /** A link is never destructive, and there is nothing quiet to link to. */
+  variant?: Extract<Variant, 'primary' | 'secondary'>;
+  size?: Size;
+};
+
+export function LinkButton({ variant = 'secondary', size = 'md', className, ...rest }: LinkButtonProps) {
+  return <a className={buttonClass(variant, size, className)} {...rest} />;
 }
 
 export function Callout({
@@ -34,7 +32,7 @@ export function Callout({
   title,
   children,
 }: {
-  tone?: 'info' | 'warning' | 'error' | 'success';
+  tone?: Tone;
   title?: string;
   children: ReactNode;
 }) {
@@ -43,6 +41,16 @@ export function Callout({
       {title && <p className={styles.calloutTitle}>{title}</p>}
       <div className={styles.calloutBody}>{children}</div>
     </div>
+  );
+}
+
+/** A Callout for one of the notices in `notices.ts`; nothing at all when there is none. */
+export function NoticeCallout({ notice }: { notice: Notice | null }) {
+  if (!notice) return null;
+  return (
+    <Callout tone={notice.tone} title={notice.title}>
+      {notice.body}
+    </Callout>
   );
 }
 

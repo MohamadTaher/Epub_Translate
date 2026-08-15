@@ -65,8 +65,18 @@
   flex-wrap: wrap;
 }
 
+/* Pushes saving to the far end, away from the three that only edit the list. */
+.spacer {
+  margin-left: auto;
+}
+
 .savedNote {
   font-size: var(--fs-xs);
+  color: var(--sage);
+}
+
+.notice {
+  font-size: var(--fs-sm);
   color: var(--sage);
 }
 

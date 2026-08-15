@@ -34,8 +34,8 @@ async function unwrap<T>(response: Response): Promise<T> {
   throw new ApiError(response.status, detail);
 }
 
-const json = (body: unknown): RequestInit => ({
-  method: 'POST',
+const json = (method: 'POST' | 'PUT', body: unknown): RequestInit => ({
+  method,
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(body),
 });
@@ -44,19 +44,19 @@ export function getStatus(): Promise<Status> {
   return fetch('/api/status').then(unwrap<Status>);
 }
 
-export interface UploadOptions {
+interface UploadOptions {
   file: File;
   source_lang: string;
   target_lang: string;
 }
 
-export function createJob(options: UploadOptions, signal?: AbortSignal): Promise<JobSnapshot> {
+export function createJob(options: UploadOptions): Promise<JobSnapshot> {
   const form = new FormData();
   form.append('file', options.file);
   form.append('source_lang', options.source_lang);
   form.append('target_lang', options.target_lang);
 
-  return fetch('/api/jobs', { method: 'POST', body: form, signal }).then(unwrap<JobSnapshot>);
+  return fetch('/api/jobs', { method: 'POST', body: form }).then(unwrap<JobSnapshot>);
 }
 
 export function getJob(jobId: string): Promise<JobSnapshot> {
@@ -75,13 +75,15 @@ export function previewJob(
   signal?: AbortSignal,
 ): Promise<JobStats> {
   return fetch(`/api/jobs/${jobId}/preview`, {
-    ...json({ chapter_ids: chapterIds }),
+    ...json('POST', { chapter_ids: chapterIds }),
     signal,
   }).then(unwrap<JobStats>);
 }
 
 export function startJob(jobId: string, chapterIds: string[] | null): Promise<JobSnapshot> {
-  return fetch(`/api/jobs/${jobId}/start`, json({ chapter_ids: chapterIds })).then(unwrap<JobSnapshot>);
+  return fetch(`/api/jobs/${jobId}/start`, json('POST', { chapter_ids: chapterIds })).then(
+    unwrap<JobSnapshot>,
+  );
 }
 
 export function cancelJob(jobId: string): Promise<JobSnapshot> {
@@ -94,12 +96,12 @@ export function getGlossary(jobId: string): Promise<{ terms: Glossary }> {
 
 /** Replaces the whole glossary — the server has no way to change one term. */
 export function putGlossary(jobId: string, terms: Glossary): Promise<{ terms: Glossary }> {
-  return fetch(`/api/jobs/${jobId}/glossary`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ terms }),
-  }).then(unwrap<{ terms: Glossary }>);
+  return fetch(`/api/jobs/${jobId}/glossary`, json('PUT', { terms })).then(
+    unwrap<{ terms: Glossary }>,
+  );
 }
 
 export const downloadUrl = (jobId: string) => `/api/jobs/${jobId}/download`;
 export const coverUrl = (jobId: string) => `/api/jobs/${jobId}/cover`;
+/** Opened by EventSource rather than fetch, but it is still this module's URL. */
+export const eventsUrl = (jobId: string) => `/api/jobs/${jobId}/events`;

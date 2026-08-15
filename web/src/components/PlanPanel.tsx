@@ -1,5 +1,6 @@
-import { duration, estimateSeconds, tokens as formatTokens } from '../format';
-import type { JobStats, Status } from '../types';
+import { duration, estimateSeconds, tokens as formatTokens } from '@/format';
+import type { JobStats, Status } from '@/types';
+import type { GlossaryState } from '@/useGlossary';
 import { BookHeader } from './BookHeader';
 import { ChapterList } from './ChapterList';
 import { GlossaryEditor } from './GlossaryEditor';
@@ -10,6 +11,7 @@ interface Props {
   jobId: string;
   stats: JobStats;
   status: Status | null;
+  glossary: GlossaryState;
   selected: ReadonlySet<string>;
   onToggle: (id: string) => void;
   onToggleMany: (ids: string[], next: boolean) => void;
@@ -25,6 +27,7 @@ export function PlanPanel({
   jobId,
   stats,
   status,
+  glossary,
   selected,
   onToggle,
   onToggleMany,
@@ -48,6 +51,20 @@ export function PlanPanel({
   const estimate = estimateSeconds(requests, requestsPerMinute, []);
   const selectedCount = stats.chapters.filter((c) => c.patch !== null).length;
 
+  /**
+   * The line under the button.
+   *
+   * The button sits above everything it depends on, so when it is disabled this
+   * has to say why — the meter and its warnings are further down the page, past
+   * the fold on a small screen.
+   */
+  function startNote(): string {
+    if (nothingSelected) return 'Select at least one chapter below.';
+    if (overJobLimit) return `Over the ${perJobLimit}-request limit — deselect some chapters below.`;
+    if (overBudget) return `Only ${budgetLeft} requests left today — deselect some chapters below.`;
+    return `${requests} request${requests === 1 ? '' : 's'} · ${duration(estimate)}`;
+  }
+
   return (
     <section className={styles.panel}>
       <BookHeader
@@ -55,6 +72,18 @@ export function PlanPanel({
         book={stats.book}
         sourceLanguage={stats.source_language}
         targetLanguage={stats.target_language}
+        action={
+          <>
+            <Button
+              variant="primary"
+              onClick={onStart}
+              disabled={starting || over || nothingSelected}
+            >
+              {starting ? 'Starting…' : 'Start translating'}
+            </Button>
+            <p className={styles.actionsNote}>{startNote()}</p>
+          </>
+        }
       >
         <button type="button" className={styles.startOver} onClick={onStartOver}>
           Choose a different book or language
@@ -66,6 +95,12 @@ export function PlanPanel({
           This book uses the Latin alphabet, so chapters that are already translated can’t be told
           apart from ones that aren’t. Everything is included below — deselect anything that
           shouldn’t be translated.
+        </Callout>
+      )}
+
+      {error && (
+        <Callout tone="error" title="Couldn’t start">
+          {error}
         </Callout>
       )}
 
@@ -120,25 +155,8 @@ export function PlanPanel({
       </div>
 
       <Disclosure summary="Glossary">
-        <GlossaryEditor jobId={jobId} running={false} />
+        <GlossaryEditor glossary={glossary} running={false} />
       </Disclosure>
-
-      {error && (
-        <Callout tone="error" title="Couldn’t start">
-          {error}
-        </Callout>
-      )}
-
-      <div className={styles.actions}>
-        <Button variant="primary" onClick={onStart} disabled={starting || over || nothingSelected}>
-          {starting ? 'Starting…' : 'Start translating'}
-        </Button>
-        <p className={styles.actionsNote}>
-          {nothingSelected
-            ? 'Select at least one chapter.'
-            : `${requests} request${requests === 1 ? '' : 's'} · ${duration(estimate)}`}
-        </p>
-      </div>
     </section>
   );
 }

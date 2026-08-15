@@ -13,6 +13,10 @@
     "moduleDetection": "force",
     "noEmit": true,
 
+    /* Kept in step with `resolve.alias` in vite.config.ts. No `baseUrl`: it is
+       deprecated, and paths resolve relative to this file without it. */
+    "paths": { "@/*": ["./src/*"] },
+
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

@@ -1,12 +1,6 @@
 import { useEffect, useReducer } from 'react';
-import type { JobEvent, JobSnapshot } from './types';
-
-export type RequestState = 'queued' | 'active' | 'done' | 'failed';
-
-export interface RequestProgress {
-  state: RequestState;
-  attempt: number;
-}
+import { eventsUrl } from '@/api';
+import type { JobEvent, JobSnapshot, RequestProgress } from '@/types';
 
 export interface RateLimitWait {
   seconds: number;
@@ -29,7 +23,7 @@ export interface StreamState {
   lastEventAt: number;
 }
 
-const empty: StreamState = {
+export const empty: StreamState = {
   events: [],
   requests: {},
   durations: [],
@@ -39,7 +33,7 @@ const empty: StreamState = {
   lastEventAt: Date.now(),
 };
 
-type Action =
+export type Action =
   | { type: 'reset' }
   | { type: 'event'; event: JobEvent }
   | { type: 'end'; snapshot: JobSnapshot };
@@ -53,7 +47,8 @@ function withRequest(
   return { ...state.requests, [patch]: next };
 }
 
-function reduce(state: StreamState, action: Action): StreamState {
+/** Exported for its tests; the hook below is the only production caller. */
+export function reduce(state: StreamState, action: Action): StreamState {
   switch (action.type) {
     case 'reset':
       return { ...empty, lastEventAt: Date.now() };
@@ -139,7 +134,7 @@ export function useJobStream(jobId: string | null, active: boolean): StreamState
     if (!jobId || !active) return;
 
     dispatch({ type: 'reset' });
-    const source = new EventSource(`/api/jobs/${jobId}/events`);
+    const source = new EventSource(eventsUrl(jobId));
 
     source.addEventListener('message', (message) => {
       try {

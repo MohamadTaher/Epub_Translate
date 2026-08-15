@@ -1,7 +1,8 @@
-import { Fragment, useMemo } from 'react';
-import { tokens as formatTokens } from '../format';
-import type { Chapter } from '../types';
-import type { RequestProgress, RequestState } from '../useJobStream';
+import { Fragment } from 'react';
+import { MAX_ATTEMPTS } from '@/constants';
+import { tokens as formatTokens } from '@/format';
+import type { Chapter, RequestProgress, RequestState } from '@/types';
+import { useChapterGroups } from '@/useChapterGroups';
 import styles from './ChapterList.module.css';
 
 /**
@@ -36,8 +37,7 @@ const STATE_GLYPH: Record<RequestState, string> = {
 };
 
 export function ChapterList({ chapters, selection, requests }: Props) {
-  const { groups, totals, members } = useMemo(() => plan(chapters), [chapters]);
-  const introduced = new Set<number>();
+  const { groups, totals, members } = useChapterGroups(chapters);
 
   return (
     <ol className={styles.list}>
@@ -51,11 +51,6 @@ export function ChapterList({ chapters, selection, requests }: Props) {
           ));
         }
 
-        // A request's chapters need not be contiguous, so the header appears once
-        // and later runs of the same request are marked as continuing it.
-        const firstTime = !introduced.has(group.patch);
-        introduced.add(group.patch);
-
         const ids = members.get(group.patch) ?? [];
         const allSelected = selection ? ids.every((id) => selection.selected.has(id)) : false;
         const progress = requests?.[group.patch];
@@ -66,12 +61,12 @@ export function ChapterList({ chapters, selection, requests }: Props) {
             <li className={styles.groupHeader}>
               <span className={styles.groupTitle}>Request {group.patch}</span>
 
-              {!firstTime ? (
+              {!group.firstRun ? (
                 <span className={styles.groupMeta}>continued</span>
               ) : requests ? (
                 <span className={`${styles.groupState} ${styles[`state-${state}`]}`}>
                   {state === 'active' && progress && progress.attempt > 1
-                    ? `Retrying, attempt ${progress.attempt} of 10`
+                    ? `Retrying, attempt ${progress.attempt} of ${MAX_ATTEMPTS}`
                     : STATE_LABEL[state]}
                 </span>
               ) : (
@@ -80,7 +75,7 @@ export function ChapterList({ chapters, selection, requests }: Props) {
                 </span>
               )}
 
-              {firstTime && selection && ids.length > 1 && (
+              {group.firstRun && selection && ids.length > 1 && (
                 <button
                   type="button"
                   className={styles.groupToggle}
@@ -151,38 +146,6 @@ function ChapterRow({
       </label>
     </li>
   );
-}
-
-interface Group {
-  patch: number | null;
-  chapters: Chapter[];
-}
-
-/**
- * Runs of consecutive chapters that share a request, in book order, plus each
- * request's real totals.
- *
- * The totals are gathered across the whole book rather than per run, because a
- * request's chapters are often split up by skipped ones in between — showing a
- * run's own tokens would understate what the request actually costs.
- */
-function plan(chapters: Chapter[]) {
-  const groups: Group[] = [];
-  const totals = new Map<number, number>();
-  const members = new Map<number, string[]>();
-
-  for (const chapter of chapters) {
-    const last = groups[groups.length - 1];
-    if (last && last.patch === chapter.patch) last.chapters.push(chapter);
-    else groups.push({ patch: chapter.patch, chapters: [chapter] });
-
-    if (chapter.patch !== null) {
-      totals.set(chapter.patch, (totals.get(chapter.patch) ?? 0) + chapter.tokens);
-      members.set(chapter.patch, [...(members.get(chapter.patch) ?? []), chapter.id]);
-    }
-  }
-
-  return { groups, totals, members };
 }
 
 /** The server's reasons are written for a log; these read better in a list. */

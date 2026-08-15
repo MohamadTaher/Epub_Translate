@@ -17,7 +17,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from epub_translate import epub_io
+from epub_translate import language
+from epub_translate.glossary import storage as glossary_storage
 
 from . import budget, config, jobs
 
@@ -87,8 +88,8 @@ def get_status(request: Request):
         # Not a setting the UI offers, only the number it needs to estimate how
         # long a run will take.
         'requests_per_minute': config.REQUESTS_PER_MINUTE,
-        'languages': sorted(epub_io.LANGUAGE_CODES),
-        'detectable_languages': sorted(epub_io.SCRIPT_RANGES),
+        'languages': sorted(language.LANGUAGE_CODES),
+        'detectable_languages': sorted(language.SCRIPT_RANGES),
     }
 
 
@@ -278,12 +279,17 @@ def get_glossary(job_id: str):
 
 @app.put("/api/jobs/{job_id}/glossary")
 def put_glossary(job_id: str, body: GlossaryRequest):
-    """Save the glossary. Takes effect on patches not yet sent."""
+    """
+    Save the glossary. Takes effect on patches not yet sent.
+
+    This replaces the whole glossary, terms the run has learned included — the
+    editor sends the list it is showing, and that list is the reader's decision.
+    """
     job = _require_job(job_id)
-    job.glossary_path.write_text(json.dumps(body.terms, ensure_ascii=False, indent=2), encoding="utf-8")
+    glossary_storage.write_terms(job.glossary_path, body.terms)
 
     if job.translator:
-        job.translator.glossary_manager.replace_terms(body.terms)
+        job.translator.glossary.replace(body.terms)
 
     return {'terms': body.terms}
 

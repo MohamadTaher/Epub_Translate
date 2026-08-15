@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { coverUrl } from '../api';
-import { languageLabel } from '../format';
-import type { BookInfo } from '../types';
+import { coverUrl } from '@/api';
+import { languageLabel } from '@/format';
+import type { BookInfo } from '@/types';
 import styles from './BookHeader.module.css';
 
 /**
@@ -17,6 +17,7 @@ export function BookHeader({
   sourceLanguage,
   targetLanguage,
   size = 'large',
+  action,
   children,
 }: {
   jobId: string;
@@ -24,6 +25,12 @@ export function BookHeader({
   sourceLanguage: string;
   targetLanguage: string;
   size?: 'large' | 'compact';
+  /**
+   * What the reader came here to do, given the end of the header band rather
+   * than a row of its own — the cover leaves that space empty, and an action on
+   * the book belongs beside the book.
+   */
+  action?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const [coverFailed, setCoverFailed] = useState(false);
@@ -61,6 +68,8 @@ export function BookHeader({
 
         {children}
       </div>
+
+      {action && <div className={styles.action}>{action}</div>}
     </div>
   );
 }

@@ -90,14 +90,8 @@
 
 /* Actions */
 
-.actions {
-  display: flex;
-  align-items: center;
-  gap: var(--s4);
-  flex-wrap: wrap;
-  padding-top: var(--s2);
-}
-
+/* Lives in the book header, so it carries only its own typography — the column
+   it sits in is BookHeader's. */
 .actionsNote {
   font-size: var(--fs-sm);
   color: var(--ink-muted);

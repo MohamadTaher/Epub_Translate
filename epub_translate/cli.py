@@ -5,13 +5,9 @@ import os
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-from .logging_utils import logger
+from . import defaults
+from .console import logger
 from .translator import EPUBTranslator
-
-# From the project root, so the key is found no matter where this is run from.
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 def _default_output_path(input_path: str) -> str:
@@ -25,14 +21,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", help="Path to write the translated EPUB (default: '<input> (Translated).epub')")
     parser.add_argument("--source-lang", default="auto", help="Source language (default: auto-detect)")
     parser.add_argument("--target-lang", default="English", help="Target language (default: English)")
-    parser.add_argument("--glossary", help="Path to a glossary JSON file for term consistency")
-    default_model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
-    parser.add_argument("--model", default=default_model,
-                        help=f"Gemini model name, or set GEMINI_MODEL in .env (default: {default_model})")
-    parser.add_argument("--requests-per-minute", type=int, default=4,
-                        help="API request rate limit, which is also how many patches run at a time")
-    parser.add_argument("--tokens-per-minute", type=int, default=250000, help="API token rate limit")
-    parser.add_argument("--tokens-per-request", type=int, default=15000, help="Max tokens per translation batch")
+    parser.add_argument("--glossary", help="Path to a glossary JSON file for term consistency. "
+                                           "Terms learned during the run are merged back into it")
+
+    # The pacing defaults come from .env, the same file the server reads, so one
+    # book runs at one speed however it is started. A flag still wins over .env.
+    parser.add_argument("--model", default=defaults.GEMINI_MODEL,
+                        help=f"Gemini model name, or set GEMINI_MODEL in .env (default: {defaults.GEMINI_MODEL})")
+    parser.add_argument("--requests-per-minute", type=int, default=defaults.REQUESTS_PER_MINUTE,
+                        help="API request rate limit, which is also how many patches run at a time, "
+                             f"or set REQUESTS_PER_MINUTE in .env (default: {defaults.REQUESTS_PER_MINUTE})")
+    parser.add_argument("--tokens-per-minute", type=int, default=defaults.TOKENS_PER_MINUTE,
+                        help=f"API token rate limit, or set TOKENS_PER_MINUTE in .env (default: {defaults.TOKENS_PER_MINUTE:,})")
+    parser.add_argument("--tokens-per-request", type=int, default=defaults.TOKENS_PER_REQUEST,
+                        help=f"Max tokens per translation batch, or set TOKENS_PER_REQUEST in .env (default: {defaults.TOKENS_PER_REQUEST:,})")
     return parser
 
 

@@ -1,4 +1,4 @@
-import type { Status } from '../types';
+import type { Status } from '@/types';
 import styles from './AppHeader.module.css';
 
 export function AppHeader({ status }: { status: Status | null }) {

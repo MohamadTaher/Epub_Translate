@@ -17,13 +17,13 @@ Get a key at <https://aistudio.google.com/apikey>. The same `.env` is used by bo
 Pick the model in the same file:
 
 ```
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
-`gemini-2.5-pro` is the default and gives the best translations, but **it has no free
-tier** — on a key without billing enabled every request comes back `429`, and a run
-retries ten times before failing. If you are on a free key, set `gemini-2.5-flash`,
-which is also far cheaper and faster for testing.
+`gemini-3.1-pro` gives the best translations, but **it has no free tier** — on a key
+without billing enabled every request comes back `429`, and a run retries ten times
+before failing. `gemini-3.5-flash-lite` is the default for that reason: it works on a
+free key, and is far cheaper and faster for testing.
 
 The CLI's `--model` flag overrides this for a single run, and the server reports the
 model in use from `GET /api/status`.
@@ -89,7 +89,7 @@ gcloud run deploy epub-translate \
   --max-instances 1 \
   --timeout 3600 \
   --memory 1Gi \
-  --set-env-vars GEMINI_API_KEY=your-key-here,GEMINI_MODEL=gemini-2.5-flash,DATA_DIR=/tmp/epub_translate
+  --set-env-vars GEMINI_API_KEY=your-key-here,GEMINI_MODEL=gemini-3.5-flash-lite,DATA_DIR=/tmp/epub_translate
 ```
 
 The first run offers to enable the Cloud Run, Cloud Build and Artifact Registry APIs; the upload respects `.gitignore`, so `node_modules` and `web/dist` stay out of it.
@@ -133,6 +133,22 @@ only park threads inside the rate limiter.
 
 ### Local development
 
+`docker-compose.override.yml` is merged in automatically and turns `docker compose up`
+into a development loop: it mounts the working tree over `/app` and runs uvicorn with
+`--reload`, so the container serves the code in this directory rather than the copy
+baked into the image when it was built. Python edits restart the server on their own;
+a frontend change needs a rebuild of `web/dist` and a browser refresh. The image only
+has to be rebuilt when `requirements.txt` or `package.json` change.
+
+That mount is the one thing a deployed container will not have, so to run what would
+actually ship — code copied in, nothing mounted — leave the override out:
+
+```
+docker compose -f docker-compose.yml up --build
+```
+
+Without Docker at all:
+
 ```
 pip install -r requirements.txt
 uvicorn server.app:app --reload --port 7860
@@ -170,18 +186,21 @@ Common options:
 | `--source-lang` | Source language | `auto` |
 | `--target-lang` | Target language | `English` |
 | `--glossary` | Glossary JSON file for consistent terms | none |
-| `--model` | Gemini model name | `gemini-2.5-pro` |
-| `--requests-per-minute` | Request rate, which is also how many patches run at a time | `4` |
-| `--tokens-per-minute` | API token rate limit | `250000` |
-| `--tokens-per-request` | Max tokens per batch of chapters | `15000` |
+| `--model` | Gemini model name | `GEMINI_MODEL`, else `gemini-3.5-flash-lite` |
+| `--requests-per-minute` | Request rate, which is also how many patches run at a time | `REQUESTS_PER_MINUTE`, else `4` |
+| `--tokens-per-minute` | API token rate limit | `TOKENS_PER_MINUTE`, else `250000` |
+| `--tokens-per-request` | Max tokens per batch of chapters | `TOKENS_PER_REQUEST`, else `15000` |
 
-Run `python translate_epub.py --help` for the full list.
+The last four default to the same `.env` settings the server is paced by, so a
+book runs at one speed however it is started; passing the flag overrides it.
+Run `python translate_epub.py --help` for the full list, which prints the
+defaults your `.env` currently resolves to.
 
 ## How it works
 
 1. Extracts chapters from the EPUB, skipping any already translated (see below).
 2. Groups untranslated chapters into token-limited patches.
-3. Translates patches concurrently via Gemini, injecting relevant glossary terms into each prompt.
+3. Translates patches concurrently via Gemini, injecting relevant glossary terms into each prompt and merging in the new terms each response reports.
 4. Auto-saves the EPUB after every successful patch. `Ctrl+C` stops gracefully — in-flight patches finish and progress is saved before exit.
 
 ### Detecting already-translated chapters
@@ -198,13 +217,37 @@ A JSON file mapping original terms to their translation, used to keep names/plac
 {"道玄": "Dao Xuan"}
 ```
 
-Pass it with `--glossary terms.json`, or edit it over the API at `/api/jobs/{id}/glossary` — edits mid-run apply to batches not yet sent. Relevant entries are pulled into each translation prompt automatically.
+Pass it with `--glossary terms.json`, or edit it over the API at `/api/jobs/{id}/glossary` — edits mid-run apply to batches not yet sent. Only the entries a batch actually mentions are pulled into its prompt, so a long glossary doesn't cost tokens on every request.
+
+**It fills itself in as the book is translated.** Each request asks the model to
+report whichever names and terms in those chapters it was not already given, and
+they are merged into the glossary and travel back out with the later requests that mention them — which is
+what keeps a character called the same thing in chapter 40 as in chapter 1, when
+the model only ever sees one batch at a time. The first translation of a term
+wins: once settled, a term keeps its translation however the model renders it
+later. Terms you supplied yourself are settled from the start, so learning never
+overrules you — except that a term you left with a blank translation counts as
+one for us to fill in.
+
+Learned terms are written back to the glossary file after each request, so
+`--glossary terms.json` accumulates across runs, and `GET /api/jobs/{id}/glossary`
+returns what the run has learned so far. `PUT` replaces the *whole* glossary, so a
+client that saves a list fetched before the run would drop what it learned; the web
+app re-reads the server's copy inside every save and carries those terms over.
+
+In the browser, the glossary panel appears once a book has been analysed and stays
+through the run. **Import a file** to bring in a glossary from elsewhere — the one
+the CLI writes, or one saved from an earlier book in the same series. Importing
+merges rather than replaces, and what this book has already decided wins, so it can
+never rename a character mid-way. **Export** hands the list back as the same kind of
+file, which is how a series carries its names from one book to the next.
 
 ## Known limitations
 
 - Jobs live in memory. Restarting the server loses whatever was in flight.
 - The daily budget counter lives on disk, so it resets whenever the container is rebuilt or restarted.
 - Token counts use OpenAI's `cl100k_base` tokenizer, so Gemini token totals and time estimates are approximate.
+- The per-minute limits are enforced in this process only. Two runs started from two containers against one key will each keep to the limit and together exceed it.
 - The first request after the container has been idle is slow.
 
 ## Project layout
@@ -213,12 +256,18 @@ Pass it with `--glossary terms.json`, or edit it over the API at `/api/jobs/{id}
 translate_epub.py    CLI entry point (python translate_epub.py ...)
 epub_translate/
   cli.py             argument parsing
-  translator.py      translation orchestration, retries, rate limiting
-  epub_io.py         EPUB reading/writing, chapter extraction, patching
-  glossary.py        glossary loading and term matching
-  prompts.py         prompt templates
+  defaults.py        pacing settings, shared with the server
+  translator.py      wiring a run together, pacing it, and saving as it goes
+  plan.py            what a run would involve, before anything is spent
+  worker.py          one batch of chapters, from prompt to translated chapters
+  run_state.py       the counters every worker shares
+  gemini.py          sending a request, and reading what comes back
+  packing.py         grouping chapters into batches of one request each
+  book/              reading an EPUB, its chapters, and writing the translation
+  glossary/          the glossary, and the terms each response teaches it
+  prompts.py         the prompt sent for each batch of chapters
   rate_limiter.py    API rate limiting
-  logging_utils.py   colored console logging
+  console.py         colored terminal output, and the one prompt the CLI asks
   tokens.py          token counting
 server/
   app.py             HTTP endpoints and static file serving

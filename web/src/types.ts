@@ -1,4 +1,10 @@
-/** Wire types. These mirror server/app.py and server/jobs.py exactly. */
+/**
+ * Wire types, mirroring server/app.py and server/jobs.py exactly, and the few
+ * shared shapes derived from them.
+ *
+ * The derived ones live here rather than in whichever module first needed them,
+ * so a presentational component never has to import from the transport layer.
+ */
 
 export interface Status {
   configured: boolean;
@@ -79,3 +85,22 @@ export interface JobEvent {
 }
 
 export type Glossary = Record<string, string>;
+
+/* Derived ------------------------------------------------------------------ */
+
+/**
+ * Language is the only thing a visitor chooses. Pace and batch size are the
+ * server owner's to set in .env, since it is their quota being spent.
+ */
+export interface UploadSettings {
+  source_lang: string;
+  target_lang: string;
+}
+
+export type RequestState = 'queued' | 'active' | 'done' | 'failed';
+
+/** Where one request has got to, as worked out from the event stream. */
+export interface RequestProgress {
+  state: RequestState;
+  attempt: number;
+}

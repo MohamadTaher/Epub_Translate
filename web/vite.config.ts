@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -6,6 +7,10 @@ import react from '@vitejs/plugin-react';
 // the paths line up; in development the dev server has to forward them.
 export default defineConfig({
   plugins: [react()],
+  // Kept in step with the `paths` entry in tsconfig.app.json.
+  resolve: {
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
   build: {
     outDir: 'dist',
   },

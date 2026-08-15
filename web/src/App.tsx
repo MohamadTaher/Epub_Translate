@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { cancelJob, createJob, getJob, getStatus, previewJob, startJob } from './api';
-import { AppHeader } from './components/AppHeader';
-import { PlanPanel } from './components/PlanPanel';
-import { RunPanel } from './components/RunPanel';
-import type { UploadSettings } from './components/UploadPanel';
-import { UploadPanel } from './components/UploadPanel';
-import { Callout } from './components/ui';
-import type { JobSnapshot, JobStats, Status } from './types';
-import { useJobStream } from './useJobStream';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { cancelJob, createJob, getJob, startJob } from '@/api';
+import { AppHeader } from '@/components/AppHeader';
+import { PlanPanel } from '@/components/PlanPanel';
+import { RunPanel } from '@/components/RunPanel';
+import { UploadPanel } from '@/components/UploadPanel';
+import { Callout } from '@/components/ui';
+import { TERMINAL } from '@/constants';
+import type { JobSnapshot, UploadSettings } from '@/types';
+import { useGlossary } from '@/useGlossary';
+import { useJobStream } from '@/useJobStream';
+import { usePreview } from '@/usePreview';
+import { useResumableJob } from '@/useResumableJob';
+import { useServerStatus } from '@/useServerStatus';
 import styles from './App.module.css';
 
 const DEFAULT_SETTINGS: UploadSettings = {
@@ -15,19 +19,11 @@ const DEFAULT_SETTINGS: UploadSettings = {
   target_lang: 'English',
 };
 
-const TERMINAL = ['done', 'failed', 'cancelled'];
-
-/** Until /api/status answers, the server's own default is the best guess. */
-const ASSUMED_REQUESTS_PER_MINUTE = 4;
-
 export default function App() {
-  const [status, setStatus] = useState<Status | null>(null);
+  const { status, refresh: refreshStatus, requestsPerMinute } = useServerStatus();
+
   const [settings, setSettings] = useState<UploadSettings>(DEFAULT_SETTINGS);
   const [file, setFile] = useState<File | null>(null);
-
-  const [job, setJob] = useState<JobSnapshot | null>(null);
-  const [preview, setPreview] = useState<JobStats | null>(null);
-  const [previewing, setPreviewing] = useState(false);
 
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [touched, setTouched] = useState(false);
@@ -38,43 +34,27 @@ export default function App() {
 
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
-  const [expired, setExpired] = useState(false);
+
+  // A job arrives with a plan already made; the selection starts as whatever the
+  // server chose. Stable, so resuming from the URL happens once.
+  const takePlannedSelection = useCallback((snapshot: JobSnapshot) => {
+    const planned = snapshot.stats?.chapters.filter((c) => c.patch !== null).map((c) => c.id) ?? [];
+    setSelected(new Set(planned));
+    setTouched(false);
+  }, []);
+
+  const { job, setJob, adopt, expired, clear } = useResumableJob(takePlannedSelection);
 
   const streaming = job !== null && (job.status === 'running' || TERMINAL.includes(job.status));
   const stream = useJobStream(job?.id ?? null, streaming);
 
-  const refreshStatus = useCallback(() => {
-    getStatus().then(setStatus).catch(() => undefined);
-  }, []);
+  const selectionList = useMemo(() => [...selected].sort(), [selected]);
+  const { preview, previewing, reset: resetPreview } = usePreview(job, selectionList, touched);
 
-  // Startup: the server's limits, and any job this tab was already following.
-  useEffect(() => {
-    refreshStatus();
-
-    const existing = new URLSearchParams(window.location.search).get('job');
-    if (!existing) return;
-
-    getJob(existing)
-      .then((snapshot) => {
-        setJob(snapshot);
-        setSelectionFrom(snapshot);
-      })
-      .catch(() => {
-        setExpired(true);
-        clearJobParam();
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function setSelectionFrom(snapshot: JobSnapshot) {
-    const planned = snapshot.stats?.chapters.filter((c) => c.patch !== null).map((c) => c.id) ?? [];
-    setSelected(new Set(planned));
-    setTouched(false);
-  }
-
-  function clearJobParam() {
-    window.history.replaceState(null, '', window.location.pathname);
-  }
+  // Held here rather than in either panel: both render the editor, in different
+  // subtrees, so starting a run would otherwise throw away unsaved edits. Once a
+  // run is over it is told so, to pick up the terms the book taught itself.
+  const glossary = useGlossary(job?.id ?? null, job !== null && TERMINAL.includes(job.status));
 
   // The terminal `end` event carries the final snapshot; take it, and refresh the
   // budget, which the run has been spending the whole time.
@@ -82,9 +62,9 @@ export default function App() {
     if (!stream.final) return;
     setJob(stream.final);
     refreshStatus();
-  }, [stream.final, refreshStatus]);
+  }, [stream.final, setJob, refreshStatus]);
 
-  /* Upload ---------------------------------------------------------------- */
+  /* Actions --------------------------------------------------------------- */
 
   async function analyse() {
     if (!file) return;
@@ -92,11 +72,10 @@ export default function App() {
     setUploadError(null);
     try {
       const snapshot = await createJob({ file, ...settings });
-      setJob(snapshot);
-      setSelectionFrom(snapshot);
-      setPreview(null);
+      adopt(snapshot);
+      takePlannedSelection(snapshot);
+      resetPreview();
       setPlanError(null);
-      window.history.replaceState(null, '', `?job=${snapshot.id}`);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Could not read that book.');
       refreshStatus();
@@ -104,59 +83,6 @@ export default function App() {
       setAnalysing(false);
     }
   }
-
-  /* Plan ------------------------------------------------------------------ */
-
-  const selectionList = useMemo(() => [...selected].sort(), [selected]);
-  const previewRequest = useRef(0);
-
-  // Re-cost the selection on the server rather than guessing at it here. Debounced,
-  // because ticking a run of chapters shouldn't fire a request per click.
-  useEffect(() => {
-    if (!job || job.status !== 'ready' || !touched) return;
-
-    const token = ++previewRequest.current;
-    const controller = new AbortController();
-    setPreviewing(true);
-
-    const timer = window.setTimeout(() => {
-      previewJob(job.id, selectionList, controller.signal)
-        .then((stats) => {
-          if (token === previewRequest.current) setPreview(stats);
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          if (token === previewRequest.current) setPreviewing(false);
-        });
-    }, 300);
-
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [job, touched, selectionList]);
-
-  const toggle = useCallback((id: string) => {
-    setTouched(true);
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const toggleMany = useCallback((ids: string[], on: boolean) => {
-    setTouched(true);
-    setSelected((current) => {
-      const next = new Set(current);
-      for (const id of ids) {
-        if (on) next.add(id);
-        else next.delete(id);
-      }
-      return next;
-    });
-  }, []);
 
   async function start() {
     if (!job) return;
@@ -167,7 +93,7 @@ export default function App() {
       // already look translated. Only send a list once the reader has changed it.
       const snapshot = await startJob(job.id, touched ? selectionList : null);
       setJob(snapshot);
-      setPreview(null);
+      resetPreview();
     } catch (error) {
       setPlanError(error instanceof Error ? error.message : 'Could not start.');
 
@@ -193,15 +119,36 @@ export default function App() {
   }
 
   function startOver() {
-    setJob(null);
-    setPreview(null);
+    clear();
+    resetPreview();
     setSelected(new Set());
     setTouched(false);
     setPlanError(null);
     setUploadError(null);
-    clearJobParam();
     refreshStatus();
   }
+
+  const toggle = useCallback((id: string) => {
+    setTouched(true);
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleMany = useCallback((ids: string[], on: boolean) => {
+    setTouched(true);
+    setSelected((current) => {
+      const next = new Set(current);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }, []);
 
   /* Render ---------------------------------------------------------------- */
 
@@ -240,6 +187,7 @@ export default function App() {
             jobId={job.id}
             stats={stats}
             status={status}
+            glossary={glossary}
             selected={selected}
             onToggle={toggle}
             onToggleMany={toggleMany}
@@ -247,7 +195,7 @@ export default function App() {
             onStartOver={startOver}
             starting={starting}
             previewing={previewing}
-            requestsPerMinute={status?.requests_per_minute ?? ASSUMED_REQUESTS_PER_MINUTE}
+            requestsPerMinute={requestsPerMinute}
             error={planError}
           />
         )}
@@ -256,10 +204,11 @@ export default function App() {
           <RunPanel
             job={job}
             stream={stream}
+            glossary={glossary}
             onCancel={stop}
             onStartOver={startOver}
             cancelling={cancelling}
-            requestsPerMinute={status?.requests_per_minute ?? ASSUMED_REQUESTS_PER_MINUTE}
+            requestsPerMinute={requestsPerMinute}
           />
         )}
       </main>

@@ -68,8 +68,13 @@
 
   /* Measure */
   --page-max: 1120px;
-  --column-max: 880px;
   --measure: 68ch;
+
+  /* Breakpoints, named here for reading only — custom properties don't work in
+     media queries, so they are written out as literals where they are used.
+     900px is where the run panel drops to one column and its log collapses
+     (RunPanel.tsx matches that one in JS); 560px is where the book header, the
+     log rows and the upload panel tighten up; 520px is the app header. */
 
   /* Motion */
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);

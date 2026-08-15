@@ -1,14 +1,20 @@
 import { useEffect, useState } from 'react';
-import { downloadUrl } from '../api';
-import { duration, estimateSeconds } from '../format';
-import type { JobSnapshot } from '../types';
-import type { StreamState } from '../useJobStream';
+import { downloadUrl } from '@/api';
+import { STALL_SECONDS } from '@/constants';
+import { duration, estimateSeconds } from '@/format';
+import { describeOutcome } from '@/notices';
+import type { JobSnapshot } from '@/types';
+import type { GlossaryState } from '@/useGlossary';
+import type { StreamState } from '@/useJobStream';
 import { ActivityLog } from './ActivityLog';
 import { BookHeader } from './BookHeader';
 import { ChapterList } from './ChapterList';
 import { GlossaryEditor } from './GlossaryEditor';
-import { Button, Callout, Disclosure, Eyebrow, LinkButton, Meter } from './ui';
+import { Button, Disclosure, Eyebrow, LinkButton, Meter, NoticeCallout } from './ui';
 import styles from './RunPanel.module.css';
+
+/** The same breakpoint the two-column layout uses in RunPanel.module.css. */
+const NARROW = '(max-width: 900px)';
 
 /** Ticks once a second, but only while something is actually counting down. */
 function useSecondTicker(active: boolean): number {
@@ -21,9 +27,26 @@ function useSecondTicker(active: boolean): number {
   return now;
 }
 
+/**
+ * Whether a media query matches, so the log can be one element that collapses
+ * on a narrow screen rather than two copies of itself.
+ */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const update = () => setMatches(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, [query]);
+  return matches;
+}
+
 interface Props {
   job: JobSnapshot;
   stream: StreamState;
+  glossary: GlossaryState;
   onCancel: () => void;
   onStartOver: () => void;
   cancelling: boolean;
@@ -33,6 +56,7 @@ interface Props {
 export function RunPanel({
   job,
   stream,
+  glossary,
   onCancel,
   onStartOver,
   cancelling,
@@ -40,6 +64,14 @@ export function RunPanel({
 }: Props) {
   const running = job.status === 'running';
   const now = useSecondTicker(running);
+
+  // The log is one <details>: open and un-collapsible on a wide screen, closed
+  // and openable on a narrow one. Held in state rather than left to the DOM
+  // because this panel re-renders on every event, and an uncontrolled <details>
+  // would be argued with a few times a second.
+  const narrow = useMediaQuery(NARROW);
+  const [logOpen, setLogOpen] = useState(!narrow);
+  useEffect(() => setLogOpen(!narrow), [narrow]);
 
   const stats = job.stats;
   const completed = job.completed;
@@ -57,7 +89,7 @@ export function RunPanel({
   // Nothing is emitted while a worker sleeps on the rate limiter, so a long
   // silence is itself worth reporting rather than leaving the bar looking stuck.
   const quietFor = running ? (now - stream.lastEventAt) / 1000 : 0;
-  const stalled = running && !stream.rateLimit && quietFor > 25;
+  const stalled = running && !stream.rateLimit && quietFor > STALL_SECONDS;
 
   return (
     <section className={styles.panel}>
@@ -129,11 +161,7 @@ export function RunPanel({
         </p>
       )}
 
-      {outcome && (
-        <Callout tone={outcome.tone} title={outcome.title}>
-          {outcome.body}
-        </Callout>
-      )}
+      <NoticeCallout notice={outcome} />
 
       <div className={styles.columns}>
         <div className={styles.column}>
@@ -148,57 +176,24 @@ export function RunPanel({
           <div className={styles.columnHead}>
             <Eyebrow>Activity</Eyebrow>
           </div>
-          <div className={styles.logWrap}>
-            <ActivityLog events={stream.events} />
-          </div>
-          <details className={styles.logCollapsed}>
-            <summary>Activity ({stream.events.length} lines)</summary>
+          {/* One log, not two. Below the breakpoint its summary is the only way
+              in; above it, the summary is hidden and this stays open. Rendering
+              it twice put every line in the DOM twice and left two auto-scroll
+              effects fighting over the same events. */}
+          <details open={logOpen} onToggle={(e) => setLogOpen(e.currentTarget.open)}>
+            <summary className={styles.logSummary}>Activity ({stream.events.length} lines)</summary>
             <ActivityLog events={stream.events} />
           </details>
         </div>
       </div>
 
-      {running && (
-        <Disclosure summary="Glossary">
-          <GlossaryEditor jobId={job.id} running />
-        </Disclosure>
-      )}
+      {/* Shown after the run as well as during it: by then the glossary holds
+          every name the book settled on, which is the thing worth exporting and
+          carrying into the next one. */}
+      <Disclosure summary="Glossary">
+        <GlossaryEditor glossary={glossary} running={running} />
+      </Disclosure>
     </section>
   );
 }
 
-function describeOutcome(job: JobSnapshot) {
-  const partial = job.completed > 0 && job.completed < job.total;
-
-  switch (job.status) {
-    case 'done':
-      return partial
-        ? {
-            tone: 'warning' as const,
-            title: 'Finished, but not all of it',
-            body: `${job.completed} of ${job.total} requests were translated. The rest ran out of retries. The download holds everything that succeeded, with the untranslated chapters left in their original language.`,
-          }
-        : {
-            tone: 'success' as const,
-            title: 'Translated',
-            body: 'Every request completed. The book is ready to download.',
-          };
-
-    case 'cancelled':
-      return {
-        tone: 'info' as const,
-        title: 'Stopped',
-        body: `You stopped this after ${job.completed} of ${job.total} requests. Everything finished up to that point is saved and downloadable.`,
-      };
-
-    case 'failed':
-      return {
-        tone: 'error' as const,
-        title: 'This run failed',
-        body: job.error ?? 'The translation could not be completed.',
-      };
-
-    default:
-      return null;
-  }
-}

@@ -8,7 +8,6 @@ queue the browser subscribes to.
 Jobs live in memory only: restarting the server loses whatever was in flight.
 """
 
-import json
 import queue
 import shutil
 import tempfile
@@ -20,7 +19,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from epub_translate import epub_io
+from epub_translate.book import SourceBook
+from epub_translate.glossary import storage as glossary_storage
+from epub_translate.packing import pack_by_tokens
 from epub_translate.translator import EPUBTranslator, TranslationPlan
 
 from . import budget, config
@@ -51,6 +52,9 @@ class Job:
     cover_name: Optional[str] = None   # file name within work_dir, when the book had cover art
     status: str = "preparing"          # preparing|ready|running|done|failed|cancelled
     error: Optional[str] = None
+    # The upload, parsed once and kept for the life of the job: planning,
+    # re-planning and the writer all work from this one reading of it.
+    source: Optional[SourceBook] = None
     plan: Optional[TranslationPlan] = None
     translator: Optional[EPUBTranslator] = None
     completed: int = 0
@@ -160,14 +164,14 @@ class Job:
             'target_language': self.options.get('target_lang', ''),
             'chapters': [
                 {
-                    'id': chapter['id'],
-                    'title': chapter['title'],
-                    'file_name': chapter['file_name'],
-                    'tokens': chapter.get('source_tokens', 0),
+                    'id': chapter.id,
+                    'title': chapter.title,
+                    'file_name': chapter.file_name,
+                    'tokens': chapter.source_tokens,
                     'patch': patch_of.get(id(chapter)),
                     'skip_reason': (
                         None if id(chapter) in patch_of
-                        else chapter.get('skip_reason') or "Not selected"
+                        else chapter.skip_reason or "Not selected"
                     ),
                 }
                 for chapter in self.plan.chapters
@@ -198,16 +202,17 @@ class JobStore:
         job = Job(id=uuid.uuid4().hex, work_dir=work_dir, client_ip=client_ip,
                   options=options, original_filename=filename)
         job.input_path.write_bytes(epub_bytes)
-        job.glossary_path.write_text("{}", encoding="utf-8")
+        glossary_storage.write_terms(job.glossary_path, {})
 
         with self._lock:
             self._jobs[job.id] = job
 
         try:
+            job.source = SourceBook(str(job.input_path))
             _load_book_info(job)
             translator = self._build_translator(job)
             job.plan = translator.prepare(
-                str(job.input_path),
+                job.source,
                 max_tokens_per_patch=config.TOKENS_PER_REQUEST,
             )
             job.total = len(job.plan.patches)
@@ -229,19 +234,19 @@ class JobStore:
         """
         if only_chapter_ids is None:
             # Same default as `prepare`: leave out what already looks translated.
-            chapters = [ch for ch in job.plan.chapters if not ch.get('already_translated', False)]
+            chapters = [ch for ch in job.plan.chapters if not ch.already_translated]
         else:
-            chapters = [ch for ch in job.plan.chapters if ch['id'] in only_chapter_ids]
+            chapters = [ch for ch in job.plan.chapters if ch.id in only_chapter_ids]
 
-        patches = epub_io.pack_by_tokens(
-            [(chapter, chapter.get('source_tokens', 0)) for chapter in chapters],
+        patches = pack_by_tokens(
+            [(chapter, chapter.source_tokens) for chapter in chapters],
             config.TOKENS_PER_REQUEST,
         )
 
         preview_plan = TranslationPlan(
             chapters=job.plan.chapters,
             patches=patches,
-            total_tokens=sum(ch.get('source_tokens', 0) for patch in patches for ch in patch),
+            total_tokens=sum(ch.source_tokens for patch in patches for ch in patch),
             source_language=job.plan.source_language,
         )
 
@@ -272,7 +277,7 @@ class JobStore:
         translator.on_event = listener
 
         job.plan = translator.prepare(
-            str(job.input_path),
+            job.source,
             max_tokens_per_patch=config.TOKENS_PER_REQUEST,
             only_chapter_ids=only_chapter_ids,
         )
@@ -288,8 +293,13 @@ class JobStore:
 
     def _run(self, job: Job):
         try:
-            job.translator.run(job.plan, str(job.input_path), str(job.output_path))
-            if job.translator.should_stop:
+            job.translator.run(job.plan, job.source, str(job.output_path))
+            if job.translator.aborted_after_failures:
+                # It stopped itself rather than being cancelled, and `should_stop`
+                # is set either way — so this has to be asked about first.
+                job.status = "failed"
+                job.error = "Too many requests failed in a row. The API may be down."
+            elif job.translator.should_stop:
                 job.status = "cancelled"
             elif job.total and job.completed == 0:
                 # Every patch exhausted its retries; there is no book to download.
@@ -342,20 +352,19 @@ def _load_book_info(job: Job):
     goes wrong here leaves the fields empty rather than failing the upload.
     """
     try:
-        info = epub_io.read_book_info(str(job.input_path))
+        info = job.source.info()
     except Exception:
         return
 
-    job.book_title = info.get('title')
-    job.book_author = info.get('author')
+    job.book_title = info.title
+    job.book_author = info.author
 
-    cover_bytes = info.get('cover_bytes')
-    if not cover_bytes:
+    if not info.cover_bytes:
         return
 
-    extension = _COVER_EXTENSIONS.get(info.get('cover_media_type') or "", ".jpg")
+    extension = _COVER_EXTENSIONS.get(info.cover_media_type or "", ".jpg")
     try:
-        (job.work_dir / f"cover{extension}").write_bytes(cover_bytes)
+        (job.work_dir / f"cover{extension}").write_bytes(info.cover_bytes)
         job.cover_name = f"cover{extension}"
     except OSError:
         pass
@@ -374,9 +383,14 @@ def _ensure_scratch_dir() -> Path:
 
 
 def read_glossary(job: Job) -> Dict[str, str]:
+    """
+    The job's glossary, including whatever the run has learned so far.
+
+    An unreadable one is an empty one: the editor should still open.
+    """
     try:
-        return json.loads(job.glossary_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        return glossary_storage.read_terms(job.glossary_path)
+    except (OSError, ValueError):
         return {}
 
 
