@@ -1,27 +1,17 @@
 import { useId, useRef, useState } from 'react';
-import { clamp, fileSize, languageLabel } from '../format';
+import { fileSize, languageLabel } from '../format';
 import type { Status } from '../types';
-import { Button, Callout, Disclosure, Field } from './ui';
+import { Button, Callout, Field } from './ui';
 import styles from './UploadPanel.module.css';
 
+/**
+ * Language is the only thing a visitor chooses. Pace and batch size are the
+ * server owner's to set in .env, since it is their quota being spent.
+ */
 export interface UploadSettings {
   source_lang: string;
   target_lang: string;
-  max_tokens_per_patch: number;
-  max_concurrent: number;
-  max_requests_per_minute: number;
 }
-
-/**
- * The server accepts these without checking them, so the bounds live here. The
- * lower bound on tokens-per-patch matters most: it is the lever a reader is told
- * to pull when a book needs more requests than a translation is allowed.
- */
-const LIMITS = {
-  max_tokens_per_patch: [2000, 60000],
-  max_concurrent: [1, 8],
-  max_requests_per_minute: [1, 20],
-} as const;
 
 interface Props {
   status: Status | null;
@@ -78,11 +68,7 @@ export function UploadPanel({
   return (
     <section className={styles.panel}>
       <div className={styles.hero}>
-        <h1 className={styles.title}>
-          Translate a book,
-          <br />
-          keeping its voice.
-        </h1>
+        <h1 className={styles.title}>Translate a book, keeping its voice.</h1>
         <p className={styles.lede}>
           A whole EPUB, chapter by chapter, with a glossary that keeps names consistent all the way
           through.
@@ -190,35 +176,6 @@ export function UploadPanel({
             </Field>
           </div>
 
-          <Disclosure summary="Translation settings">
-            <div className={styles.settings}>
-              <NumberField
-                label="Tokens per request"
-                hint="Bigger requests mean fewer of them. Raise this if a book needs more requests than one translation allows."
-                value={settings.max_tokens_per_patch}
-                bounds={LIMITS.max_tokens_per_patch}
-                step={1000}
-                onChange={(v) => onSettingsChange({ ...settings, max_tokens_per_patch: v })}
-              />
-              <NumberField
-                label="Requests at once"
-                hint="How many chapters are translated in parallel."
-                value={settings.max_concurrent}
-                bounds={LIMITS.max_concurrent}
-                step={1}
-                onChange={(v) => onSettingsChange({ ...settings, max_concurrent: v })}
-              />
-              <NumberField
-                label="Requests per minute"
-                hint="Keep this at or below your Gemini quota, or requests will be rejected and retried."
-                value={settings.max_requests_per_minute}
-                bounds={LIMITS.max_requests_per_minute}
-                step={1}
-                onChange={(v) => onSettingsChange({ ...settings, max_requests_per_minute: v })}
-              />
-            </div>
-          </Disclosure>
-
           <div className={styles.actions}>
             <Button variant="primary" disabled={!file || analysing} onClick={onAnalyse}>
               {analysing ? 'Reading…' : 'Analyse this book'}
@@ -230,45 +187,6 @@ export function UploadPanel({
         </>
       )}
     </section>
-  );
-}
-
-function NumberField({
-  label,
-  hint,
-  value,
-  bounds,
-  step,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  value: number;
-  bounds: readonly [number, number];
-  step: number;
-  onChange: (value: number) => void;
-}) {
-  const id = useId();
-  const [draft, setDraft] = useState(String(value));
-
-  return (
-    <Field label={label} hint={hint} htmlFor={id}>
-      <input
-        id={id}
-        type="number"
-        inputMode="numeric"
-        min={bounds[0]}
-        max={bounds[1]}
-        step={step}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          const clamped = clamp(Number(draft), bounds[0], bounds[1]);
-          setDraft(String(clamped));
-          onChange(clamped);
-        }}
-      />
-    </Field>
   );
 }
 

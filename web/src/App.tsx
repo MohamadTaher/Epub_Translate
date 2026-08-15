@@ -13,12 +13,12 @@ import styles from './App.module.css';
 const DEFAULT_SETTINGS: UploadSettings = {
   source_lang: 'auto',
   target_lang: 'English',
-  max_tokens_per_patch: 15000,
-  max_concurrent: 5,
-  max_requests_per_minute: 4,
 };
 
 const TERMINAL = ['done', 'failed', 'cancelled'];
+
+/** Until /api/status answers, the server's own default is the best guess. */
+const ASSUMED_REQUESTS_PER_MINUTE = 4;
 
 export default function App() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -43,20 +43,8 @@ export default function App() {
   const streaming = job !== null && (job.status === 'running' || TERMINAL.includes(job.status));
   const stream = useJobStream(job?.id ?? null, streaming);
 
-  const configured = useRef(false);
-
   const refreshStatus = useCallback(() => {
-    getStatus()
-      .then((next) => {
-        setStatus(next);
-        // The server owns the tuning defaults; adopt them once, before the
-        // reader has had a chance to change anything.
-        if (!configured.current) {
-          configured.current = true;
-          setSettings((current) => ({ ...current, ...next.defaults }));
-        }
-      })
-      .catch(() => undefined);
+    getStatus().then(setStatus).catch(() => undefined);
   }, []);
 
   // Startup: the server's limits, and any job this tab was already following.
@@ -132,7 +120,7 @@ export default function App() {
     setPreviewing(true);
 
     const timer = window.setTimeout(() => {
-      previewJob(job.id, selectionList, settings.max_tokens_per_patch, controller.signal)
+      previewJob(job.id, selectionList, controller.signal)
         .then((stats) => {
           if (token === previewRequest.current) setPreview(stats);
         })
@@ -146,7 +134,7 @@ export default function App() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [job, touched, selectionList, settings.max_tokens_per_patch]);
+  }, [job, touched, selectionList]);
 
   const toggle = useCallback((id: string) => {
     setTouched(true);
@@ -259,7 +247,7 @@ export default function App() {
             onStartOver={startOver}
             starting={starting}
             previewing={previewing}
-            requestsPerMinute={settings.max_requests_per_minute}
+            requestsPerMinute={status?.requests_per_minute ?? ASSUMED_REQUESTS_PER_MINUTE}
             error={planError}
           />
         )}
@@ -271,8 +259,7 @@ export default function App() {
             onCancel={stop}
             onStartOver={startOver}
             cancelling={cancelling}
-            concurrency={settings.max_concurrent}
-            requestsPerMinute={settings.max_requests_per_minute}
+            requestsPerMinute={status?.requests_per_minute ?? ASSUMED_REQUESTS_PER_MINUTE}
           />
         )}
       </main>

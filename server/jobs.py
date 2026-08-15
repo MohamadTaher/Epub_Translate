@@ -181,7 +181,7 @@ class JobStore:
     def __init__(self):
         self._jobs: Dict[str, Job] = {}
         self._lock = threading.Lock()
-        self._executor = ThreadPoolExecutor(max_workers=config.MAX_ACTIVE_JOBS)
+        self._executor = ThreadPoolExecutor(max_workers=config.MAX_TRANSLATIONS_AT_ONCE)
 
     def get(self, job_id: str) -> Optional[Job]:
         with self._lock:
@@ -208,7 +208,7 @@ class JobStore:
             translator = self._build_translator(job)
             job.plan = translator.prepare(
                 str(job.input_path),
-                max_tokens_per_patch=options['max_tokens_per_patch'],
+                max_tokens_per_patch=config.TOKENS_PER_REQUEST,
             )
             job.total = len(job.plan.patches)
             job.status = "ready"
@@ -218,8 +218,7 @@ class JobStore:
 
         return job
 
-    def preview(self, job: Job, only_chapter_ids: Optional[Set[str]],
-                max_tokens_per_patch: int) -> Dict:
+    def preview(self, job: Job, only_chapter_ids: Optional[Set[str]]) -> Dict:
         """
         Re-cost a chapter selection without committing to it.
 
@@ -236,7 +235,7 @@ class JobStore:
 
         patches = epub_io.pack_by_tokens(
             [(chapter, chapter.get('source_tokens', 0)) for chapter in chapters],
-            max_tokens_per_patch,
+            config.TOKENS_PER_REQUEST,
         )
 
         preview_plan = TranslationPlan(
@@ -274,7 +273,7 @@ class JobStore:
 
         job.plan = translator.prepare(
             str(job.input_path),
-            max_tokens_per_patch=job.options['max_tokens_per_patch'],
+            max_tokens_per_patch=config.TOKENS_PER_REQUEST,
             only_chapter_ids=only_chapter_ids,
         )
         job.translator = translator
@@ -310,21 +309,19 @@ class JobStore:
                 subscriber.put(STREAM_END)
 
     def _build_translator(self, job: Job) -> EPUBTranslator:
-        options = job.options
         return EPUBTranslator(
             api_key=config.GEMINI_API_KEY,
-            source_language=options['source_lang'],
-            target_language=options['target_lang'],
-            max_concurrent=options['max_concurrent'],
+            source_language=job.options['source_lang'],
+            target_language=job.options['target_lang'],
             glossary_file_path=str(job.glossary_path),
-            max_requests_per_minute=options['max_requests_per_minute'],
-            max_tokens_per_minute=config.DEFAULT_MAX_TOKENS_PER_MINUTE,
-            model_name=config.DEFAULT_MODEL,
+            requests_per_minute=config.REQUESTS_PER_MINUTE,
+            tokens_per_minute=config.TOKENS_PER_MINUTE,
+            model_name=config.GEMINI_MODEL,
         )
 
     def reap_expired(self):
-        """Delete finished jobs past their TTL, along with their uploads."""
-        cutoff = time.time() - config.JOB_TTL_MINUTES * 60
+        """Delete finished jobs past their expiry, along with their uploads."""
+        cutoff = time.time() - config.DELETE_UPLOADS_AFTER_MINUTES * 60
         with self._lock:
             expired = [
                 job for job in self._jobs.values()

@@ -33,7 +33,7 @@ Two things worth knowing before changing it:
   wording rather than leaking it.
 
 Build output must land in `web/dist` — `Dockerfile:26` copies it and
-`server/config.py:52` points `STATIC_DIR` there. `server/app.py` mounts it only
+`server/config.py:57` points `STATIC_DIR` there. `server/app.py` mounts it only
 `if config.STATIC_DIR.exists()` and that is evaluated at import, so a build has to
 precede the server starting.
 
@@ -56,6 +56,12 @@ image currently ships 20.20, so don't pin tooling that wants Node 22.
 Changes to `.env` need only a restart (`docker compose restart`); it is mounted into
 the container rather than baked into the image, but settings are read once at startup.
 
+Everything about how a run is paced lives there and nowhere else — the UI offers a
+visitor only the two languages. `REQUESTS_PER_MINUTE` is deliberately one number
+doing two jobs, capping the rate limiter *and* sizing the worker pool: requests take
+tens of seconds, so a larger pool would only park threads inside the limiter.
+`/api/status` reports it because the ETA needs it, not because it is editable.
+
 To iterate on the UI with hot reload, run Vite in a container and point its proxy at
 the API container:
 
@@ -64,6 +70,30 @@ docker run --rm -p 5173:5173 -v "${PWD}\web:/w" -w /w \
   -e API_TARGET=http://host.docker.internal:7860 \
   node:20-alpine sh -c "npm run dev -- --host"
 ```
+
+## Deployment target is Cloud Run
+
+The container listens on `$PORT` and falls back to 7860, so compose and Cloud Run
+both work untouched. `CMD` is shell form on purpose — it needs the variable
+expanded at runtime — with `exec` in front so uvicorn stays PID 1 and still gets
+the SIGTERM Cloud Run sends 10 seconds before it kills an instance. Docker lints
+shell-form `CMD` as a signal hazard; the `exec` is what answers that, so don't
+"fix" the warning by switching to JSON form.
+
+Three deploy flags in `README.md` are load-bearing, and all three exist because
+this app does its work *after* answering the request:
+
+- `--no-cpu-throttling`, or the background translation thread loses the CPU as
+  soon as `/start` returns.
+- `--max-instances 1`, because jobs live in one process's memory and session
+  affinity is best-effort. Anything that assumes a second instance could serve the
+  same job is wrong unless job state moves out of memory first.
+- `--timeout 3600`, the ceiling on the SSE stream, which is a single long request.
+  60 minutes is Cloud Run's maximum, not a choice.
+
+`DATA_DIR` is overridden to `/tmp/epub_translate` there. The Cloud Run filesystem
+is in memory and counts against the instance's memory limit, so uploads are
+charged twice over — once as files, once as RAM.
 
 ## API surface
 

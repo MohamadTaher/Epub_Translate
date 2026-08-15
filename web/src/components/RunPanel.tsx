@@ -27,7 +27,6 @@ interface Props {
   onCancel: () => void;
   onStartOver: () => void;
   cancelling: boolean;
-  concurrency: number;
   requestsPerMinute: number;
 }
 
@@ -37,7 +36,6 @@ export function RunPanel({
   onCancel,
   onStartOver,
   cancelling,
-  concurrency,
   requestsPerMinute,
 }: Props) {
   const running = job.status === 'running';
@@ -84,7 +82,7 @@ export function RunPanel({
                 <span className={styles.eta}>
                   {remaining > 0
                     ? `${duration(
-                        estimateSeconds(remaining, requestsPerMinute, stream.durations, concurrency),
+                        estimateSeconds(remaining, requestsPerMinute, stream.durations),
                       )} left`
                     : 'finishing up'}
                 </span>

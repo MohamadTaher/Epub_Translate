@@ -35,21 +35,24 @@ export function duration(seconds: number): string {
  * Throughput is bounded by the per-minute request limit rather than by how fast
  * the model answers, so before anything has run the rate limit is the estimate.
  * Once requests start landing, their measured pace is better.
+ *
+ * The server runs as many requests at a time as it allows per minute, so
+ * `requestsPerMinute` stands in for concurrency too.
  */
 export function estimateSeconds(
   remainingRequests: number,
   requestsPerMinute: number,
   observedDurations: number[],
-  concurrency: number,
 ): number {
   if (remainingRequests <= 0) return 0;
 
-  const rateLimited = (remainingRequests / Math.max(1, requestsPerMinute)) * 60;
+  const pace = Math.max(1, requestsPerMinute);
+  const rateLimited = (remainingRequests / pace) * 60;
 
   if (observedDurations.length < 2) return rateLimited;
 
   const mean = observedDurations.reduce((a, b) => a + b, 0) / observedDurations.length;
-  const byPace = (remainingRequests / Math.max(1, concurrency)) * mean;
+  const byPace = (remainingRequests / pace) * mean;
 
   // Whichever constraint binds harder is the one that will actually be felt.
   return Math.max(rateLimited, byPace);
@@ -59,9 +62,4 @@ export function estimateSeconds(
 export function languageLabel(name: string): string {
   if (!name || name === 'auto') return 'Not detected';
   return name.charAt(0).toUpperCase() + name.slice(1);
-}
-
-export function clamp(value: number, min: number, max: number): number {
-  if (Number.isNaN(value)) return min;
-  return Math.min(max, Math.max(min, value));
 }

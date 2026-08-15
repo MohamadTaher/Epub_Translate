@@ -45,8 +45,8 @@ class EPUBTranslator:
     """
 
     def __init__(self, api_key: str, source_language: str = "auto", target_language: str = "English",
-                 max_concurrent: int = 5, glossary_file_path: str = None, max_requests_per_minute: int = 4,
-                 max_tokens_per_minute: int = 250000, model_name: str = "gemini-2.5-pro",
+                 glossary_file_path: str = None, requests_per_minute: int = 4,
+                 tokens_per_minute: int = 250000, model_name: str = "gemini-2.5-pro",
                  on_event: Optional[Callable[[Dict], None]] = None):
         if not api_key:
             raise ValueError("API key is required")
@@ -56,10 +56,14 @@ class EPUBTranslator:
         self.on_event = on_event
         self.source_lang = source_language
         self.target_lang = target_language
-        self.max_concurrent = max_concurrent
+
+        # One number sizes the worker pool as well as the rate limiter: the
+        # limiter is the real governor, and workers beyond what it lets through
+        # in a minute would spend their lives waiting inside it.
+        self.requests_per_minute = requests_per_minute
         self.rate_limiter = RateLimiter(
-            max_requests_per_minute=max_requests_per_minute,
-            max_tokens_per_minute=max_tokens_per_minute,
+            max_requests_per_minute=requests_per_minute,
+            max_tokens_per_minute=tokens_per_minute,
             on_wait=self._on_rate_limit_wait,
             on_resume=self._on_rate_limit_resume,
         )
@@ -76,8 +80,8 @@ class EPUBTranslator:
 
         self.glossary_manager = GlossaryManager(glossary_file_path)
 
-        self._emit('system', f"Concurrency limit: {max_concurrent}")
-        self._emit('system', f"Rate limits: {max_requests_per_minute} req/min, {max_tokens_per_minute:,} tokens/min")
+        self._emit('system', f"Rate limits: {requests_per_minute} req/min (and {requests_per_minute} "
+                             f"at a time), {tokens_per_minute:,} tokens/min")
         if glossary_file_path:
             self._emit('system', f"Glossary loaded: {self.glossary_manager.get_glossary_size()} terms")
 
@@ -205,13 +209,13 @@ class EPUBTranslator:
             previous_handler = signal.signal(signal.SIGINT, self._request_stop)
 
         try:
-            with ThreadPoolExecutor(max_workers=self.max_concurrent) as executor:
+            with ThreadPoolExecutor(max_workers=self.requests_per_minute) as executor:
                 futures = [
                     executor.submit(self._translate_patch_worker, patch, i + 1)
                     for i, patch in enumerate(patches)
                 ]
 
-                self._emit('concurrency', f"Starting batch of {min(self.max_concurrent, len(patches))} patches. {len(patches)} total in queue")
+                self._emit('concurrency', f"Starting batch of {min(self.requests_per_minute, len(patches))} patches. {len(patches)} total in queue")
 
                 for future in as_completed(futures):
                     if self.should_stop:

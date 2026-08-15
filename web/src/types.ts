@@ -1,23 +1,18 @@
 /** Wire types. These mirror server/app.py and server/jobs.py exactly. */
 
-export interface Defaults {
-  max_tokens_per_patch: number;
-  max_concurrent: number;
-  max_requests_per_minute: number;
-}
-
 export interface Status {
   configured: boolean;
   model: string;
   remaining_requests: number;
   daily_budget: number;
-  max_patches_per_job: number;
+  max_requests_per_book: number;
   max_upload_mb: number;
   /** Seconds until this visitor may start another translation; 0 when free. */
   cooldown_seconds: number;
   /** The server is already running as many translations as it allows. */
   busy: boolean;
-  defaults: Defaults;
+  /** The server's pace, which is also its concurrency. Set in .env, not here. */
+  requests_per_minute: number;
   languages: string[];
   detectable_languages: string[];
 }

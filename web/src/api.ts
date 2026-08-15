@@ -48,9 +48,6 @@ export interface UploadOptions {
   file: File;
   source_lang: string;
   target_lang: string;
-  max_tokens_per_patch: number;
-  max_concurrent: number;
-  max_requests_per_minute: number;
 }
 
 export function createJob(options: UploadOptions, signal?: AbortSignal): Promise<JobSnapshot> {
@@ -58,9 +55,6 @@ export function createJob(options: UploadOptions, signal?: AbortSignal): Promise
   form.append('file', options.file);
   form.append('source_lang', options.source_lang);
   form.append('target_lang', options.target_lang);
-  form.append('max_tokens_per_patch', String(options.max_tokens_per_patch));
-  form.append('max_concurrent', String(options.max_concurrent));
-  form.append('max_requests_per_minute', String(options.max_requests_per_minute));
 
   return fetch('/api/jobs', { method: 'POST', body: form, signal }).then(unwrap<JobSnapshot>);
 }
@@ -78,11 +72,10 @@ export function getJob(jobId: string): Promise<JobSnapshot> {
 export function previewJob(
   jobId: string,
   chapterIds: string[] | null,
-  maxTokensPerPatch: number,
   signal?: AbortSignal,
 ): Promise<JobStats> {
   return fetch(`/api/jobs/${jobId}/preview`, {
-    ...json({ chapter_ids: chapterIds, max_tokens_per_patch: maxTokensPerPatch }),
+    ...json({ chapter_ids: chapterIds }),
     signal,
   }).then(unwrap<JobStats>);
 }

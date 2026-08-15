@@ -62,7 +62,7 @@ def record_request():
 
 def cooldown_remaining(ip: str) -> timedelta:
     """How long until this IP may start another job."""
-    if config.IP_COOLDOWN_MINUTES <= 0:
+    if config.MINUTES_BETWEEN_TRANSLATIONS <= 0:
         return timedelta(0)
 
     with _lock:
@@ -72,7 +72,7 @@ def cooldown_remaining(ip: str) -> timedelta:
         return timedelta(0)
 
     elapsed = datetime.now(timezone.utc) - datetime.fromisoformat(row[0])
-    return max(timedelta(0), timedelta(minutes=config.IP_COOLDOWN_MINUTES) - elapsed)
+    return max(timedelta(0), timedelta(minutes=config.MINUTES_BETWEEN_TRANSLATIONS) - elapsed)
 
 
 def record_run(ip: str):

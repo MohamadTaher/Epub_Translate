@@ -1,13 +1,3 @@
----
-title: EPUB Translate
-emoji: 📖
-colorFrom: indigo
-colorTo: blue
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # EPUB Translate
 
 Translates EPUB books using Google's Gemini API. Preserves HTML structure, batches chapters into token-limited patches, and uses a glossary to keep term translations consistent across the book.
@@ -84,20 +74,62 @@ A run outlives any single request, so progress arrives only on the event stream.
 Because the key stays server-side, this needs a real host and can't run on static
 hosting like GitHub Pages.
 
-### Deploying to Hugging Face Spaces
+### Deploying
 
-Create a **Docker** Space and push this repo. Set `GEMINI_API_KEY` under *Settings → Secrets* (a secret, not a variable, so it stays out of build logs) — deployed, the key comes from there rather than from `.env`, which is never pushed. The frontmatter at the top of this file tells Spaces which port to serve.
+Any host that can run the Docker image will do. Set `GEMINI_API_KEY` in the host's own configuration rather than shipping a `.env`, which is gitignored and never copied into the image.
+
+#### Cloud Run
+
+```
+gcloud run deploy epub-translate \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --no-cpu-throttling \
+  --max-instances 1 \
+  --timeout 3600 \
+  --memory 1Gi \
+  --set-env-vars GEMINI_API_KEY=your-key-here,GEMINI_MODEL=gemini-2.5-flash,DATA_DIR=/tmp/epub_translate
+```
+
+The first run offers to enable the Cloud Run, Cloud Build and Artifact Registry APIs; the upload respects `.gitignore`, so `node_modules` and `web/dist` stay out of it.
+
+Cloud Run assumes a service's work happens inside a request, and most of this one's happens after the request has been answered. Four of those flags are what bridge that:
+
+| Flag | Why it is there |
+|---|---|
+| `--no-cpu-throttling` | Translation runs on a background thread after `/start` has returned. By default Cloud Run takes the CPU away the moment a request finishes, which would leave the run frozen mid-book. |
+| `--max-instances 1` | Jobs live in one container's memory, and Cloud Run's session affinity is best-effort. A second instance would answer with jobs it has never heard of. |
+| `--timeout 3600` | The progress stream is one long-lived request. The five-minute default would sever it repeatedly; 60 minutes is the most Cloud Run allows, and a run capped at `MAX_REQUESTS_PER_BOOK` finishes well inside that. |
+| `DATA_DIR=/tmp/epub_translate` | `/tmp` is writable on every Cloud Run instance. The image points this at `/data`, which is where compose mounts a volume instead. |
+
+No port flag is needed: Cloud Run sets `PORT` and the container listens on it, falling back to 7860 everywhere else.
+
+Redeploying is `gcloud run deploy epub-translate --source .` by itself — settings already on the service are kept.
 
 Because the key belongs to whoever deploys it, every visitor spends the owner's money. These limits bound that, and all are settable as environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `DAILY_REQUEST_BUDGET` | `200` | API requests allowed per day across all visitors |
-| `MAX_PATCHES_PER_JOB` | `25` | Caps the size of a single translation |
-| `IP_COOLDOWN_MINUTES` | `30` | Minimum wait between runs from one address |
+| `MAX_REQUESTS_PER_BOOK` | `25` | Caps the size of a single translation |
+| `MINUTES_BETWEEN_TRANSLATIONS` | `30` | Minimum wait between runs from one address; `0` disables it |
 | `MAX_UPLOAD_MB` | `25` | Largest accepted EPUB |
-| `MAX_ACTIVE_JOBS` | `2` | Translations running at once |
-| `JOB_TTL_MINUTES` | `60` | How long an uploaded book is kept before deletion |
+| `MAX_TRANSLATIONS_AT_ONCE` | `2` | Translations running at once |
+| `DELETE_UPLOADS_AFTER_MINUTES` | `60` | How long an uploaded book is kept before deletion |
+
+How a run is paced is set here too, rather than in the UI — a visitor spending
+the owner's quota has no business tuning it:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `REQUESTS_PER_MINUTE` | `4` | Request rate, which is also how many run at a time |
+| `TOKENS_PER_REQUEST` | `15000` | How much of the book goes into each request |
+| `TOKENS_PER_MINUTE` | `250000` | The other half of the Gemini quota |
+
+`REQUESTS_PER_MINUTE` is one number doing both jobs on purpose: requests take
+tens of seconds, so a worker pool larger than the per-minute allowance would
+only park threads inside the rate limiter.
 
 ### Local development
 
@@ -139,10 +171,9 @@ Common options:
 | `--target-lang` | Target language | `English` |
 | `--glossary` | Glossary JSON file for consistent terms | none |
 | `--model` | Gemini model name | `gemini-2.5-pro` |
-| `--max-concurrent` | Patches translated in parallel | `5` |
-| `--max-requests-per-minute` | API request rate limit | `4` |
-| `--max-tokens-per-minute` | API token rate limit | `250000` |
-| `--max-tokens-per-patch` | Max tokens per batch of chapters | `15000` |
+| `--requests-per-minute` | Request rate, which is also how many patches run at a time | `4` |
+| `--tokens-per-minute` | API token rate limit | `250000` |
+| `--tokens-per-request` | Max tokens per batch of chapters | `15000` |
 
 Run `python translate_epub.py --help` for the full list.
 
@@ -171,10 +202,10 @@ Pass it with `--glossary terms.json`, or edit it over the API at `/api/jobs/{id}
 
 ## Known limitations
 
-- Jobs live in memory. Restarting the server, or a Space going to sleep, loses whatever was in flight.
-- The daily budget counter lives on disk, so it resets if the Space is rebuilt (free Spaces have no persistent storage).
+- Jobs live in memory. Restarting the server loses whatever was in flight.
+- The daily budget counter lives on disk, so it resets whenever the container is rebuilt or restarted.
 - Token counts use OpenAI's `cl100k_base` tokenizer, so Gemini token totals and time estimates are approximate.
-- The first request after a Space wakes from sleep is slow.
+- The first request after the container has been idle is slow.
 
 ## Project layout
 

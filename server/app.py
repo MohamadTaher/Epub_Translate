@@ -44,7 +44,6 @@ class StartRequest(BaseModel):
 
 class PreviewRequest(BaseModel):
     chapter_ids: Optional[List[str]] = None
-    max_tokens_per_patch: Optional[int] = None
 
 
 class GlossaryRequest(BaseModel):
@@ -52,8 +51,8 @@ class GlossaryRequest(BaseModel):
 
 
 def _client_ip(request: Request) -> str:
-    # Hugging Face Spaces and most hosts sit behind a proxy, so the socket
-    # address is the proxy's, not the visitor's.
+    # Most hosts sit behind a proxy, so the socket address is the proxy's,
+    # not the visitor's.
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -78,18 +77,16 @@ def get_status(request: Request):
     """
     return {
         'configured': bool(config.GEMINI_API_KEY),
-        'model': config.DEFAULT_MODEL,
+        'model': config.GEMINI_MODEL,
         'remaining_requests': budget.remaining_today(),
         'daily_budget': config.DAILY_REQUEST_BUDGET,
-        'max_patches_per_job': config.MAX_PATCHES_PER_JOB,
+        'max_requests_per_book': config.MAX_REQUESTS_PER_BOOK,
         'max_upload_mb': config.MAX_UPLOAD_MB,
         'cooldown_seconds': int(budget.cooldown_remaining(_client_ip(request)).total_seconds()),
-        'busy': jobs.store.active_count() >= config.MAX_ACTIVE_JOBS,
-        'defaults': {
-            'max_tokens_per_patch': config.DEFAULT_MAX_TOKENS_PER_PATCH,
-            'max_concurrent': config.DEFAULT_MAX_CONCURRENT,
-            'max_requests_per_minute': config.DEFAULT_MAX_REQUESTS_PER_MINUTE,
-        },
+        'busy': jobs.store.active_count() >= config.MAX_TRANSLATIONS_AT_ONCE,
+        # Not a setting the UI offers, only the number it needs to estimate how
+        # long a run will take.
+        'requests_per_minute': config.REQUESTS_PER_MINUTE,
         'languages': sorted(epub_io.LANGUAGE_CODES),
         'detectable_languages': sorted(epub_io.SCRIPT_RANGES),
     }
@@ -101,9 +98,6 @@ async def create_job(
     file: UploadFile = File(...),
     source_lang: str = Form("auto"),
     target_lang: str = Form("English"),
-    max_tokens_per_patch: int = Form(config.DEFAULT_MAX_TOKENS_PER_PATCH),
-    max_concurrent: int = Form(config.DEFAULT_MAX_CONCURRENT),
-    max_requests_per_minute: int = Form(config.DEFAULT_MAX_REQUESTS_PER_MINUTE),
 ):
     """Accept an EPUB and report what translating it would involve."""
     if not config.GEMINI_API_KEY:
@@ -112,7 +106,7 @@ async def create_job(
     if not file.filename or not file.filename.lower().endswith(".epub"):
         raise HTTPException(status_code=400, detail="Please upload a .epub file.")
 
-    if jobs.store.active_count() >= config.MAX_ACTIVE_JOBS:
+    if jobs.store.active_count() >= config.MAX_TRANSLATIONS_AT_ONCE:
         raise HTTPException(status_code=429, detail="The server is busy with other translations. Try again shortly.")
 
     # Read in chunks so an oversized upload is rejected before it is all in memory.
@@ -129,9 +123,6 @@ async def create_job(
         options={
             'source_lang': source_lang,
             'target_lang': target_lang,
-            'max_tokens_per_patch': max_tokens_per_patch,
-            'max_concurrent': max_concurrent,
-            'max_requests_per_minute': max_requests_per_minute,
         },
         client_ip=_client_ip(request),
         filename=file.filename,
@@ -164,11 +155,11 @@ def start_job(job_id: str, body: StartRequest):
     if planned_patches == 0:
         raise HTTPException(status_code=400, detail="No chapters selected to translate.")
 
-    if planned_patches > config.MAX_PATCHES_PER_JOB:
+    if planned_patches > config.MAX_REQUESTS_PER_BOOK:
         raise HTTPException(
             status_code=413,
-            detail=f"This book needs {planned_patches} requests, over the {config.MAX_PATCHES_PER_JOB} "
-                   f"per-translation limit. Select fewer chapters or raise the tokens-per-patch setting.",
+            detail=f"This book needs {planned_patches} requests, over the {config.MAX_REQUESTS_PER_BOOK} "
+                   f"per-translation limit. Select fewer chapters.",
         )
 
     if planned_patches > budget.remaining_today():
@@ -195,11 +186,7 @@ def preview_job(job_id: str, body: PreviewRequest):
         raise HTTPException(status_code=409, detail="This job has no plan to preview.")
 
     selected = set(body.chapter_ids) if body.chapter_ids is not None else None
-    return jobs.store.preview(
-        job,
-        only_chapter_ids=selected,
-        max_tokens_per_patch=body.max_tokens_per_patch or job.options['max_tokens_per_patch'],
-    )
+    return jobs.store.preview(job, only_chapter_ids=selected)
 
 
 @app.get("/api/jobs/{job_id}")

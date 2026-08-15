@@ -29,10 +29,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     default_model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
     parser.add_argument("--model", default=default_model,
                         help=f"Gemini model name, or set GEMINI_MODEL in .env (default: {default_model})")
-    parser.add_argument("--max-concurrent", type=int, default=5, help="Number of patches to translate simultaneously")
-    parser.add_argument("--max-requests-per-minute", type=int, default=4, help="API request rate limit")
-    parser.add_argument("--max-tokens-per-minute", type=int, default=250000, help="API token rate limit")
-    parser.add_argument("--max-tokens-per-patch", type=int, default=15000, help="Max tokens per translation batch")
+    parser.add_argument("--requests-per-minute", type=int, default=4,
+                        help="API request rate limit, which is also how many patches run at a time")
+    parser.add_argument("--tokens-per-minute", type=int, default=250000, help="API token rate limit")
+    parser.add_argument("--tokens-per-request", type=int, default=15000, help="Max tokens per translation batch")
     return parser
 
 
@@ -51,14 +51,13 @@ def main(argv=None):
         api_key=api_key,
         source_language=args.source_lang,
         target_language=args.target_lang,
-        max_concurrent=args.max_concurrent,
         glossary_file_path=args.glossary,
-        max_requests_per_minute=args.max_requests_per_minute,
-        max_tokens_per_minute=args.max_tokens_per_minute,
+        requests_per_minute=args.requests_per_minute,
+        tokens_per_minute=args.tokens_per_minute,
         model_name=args.model,
     )
 
-    translator.translate_book(args.input, output_path, args.max_tokens_per_patch)
+    translator.translate_book(args.input, output_path, args.tokens_per_request)
 
 
 if __name__ == "__main__":

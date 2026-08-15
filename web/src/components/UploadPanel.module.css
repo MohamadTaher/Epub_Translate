@@ -5,21 +5,26 @@
 }
 
 .hero {
-  padding-top: var(--s8);
+  padding-top: var(--s5);
   display: flex;
   flex-direction: column;
-  gap: var(--s4);
+  gap: var(--s2);
 }
 
+/* Sized to sit on one line rather than to fill the column — the dropzone below
+   is the point of this screen, so the hero gives up height to reach it sooner.
+   `balance` only takes over on viewports too narrow for one line. */
 .title {
-  font-size: var(--fs-display);
+  font-size: clamp(1.625rem, 1.1rem + 1.85vw, 2.5rem);
+  line-height: 1.15;
+  text-wrap: balance;
 }
 
 .lede {
   max-width: 58ch;
-  font-size: 1.0625rem;
+  font-size: 1rem;
   color: var(--ink-muted);
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 /* The dropzone is a paper card with an inset rule — a bookplate rather than the
@@ -178,14 +183,6 @@
   .arrow {
     display: none;
   }
-}
-
-/* Settings */
-
-.settings {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--s5);
 }
 
 /* Actions */

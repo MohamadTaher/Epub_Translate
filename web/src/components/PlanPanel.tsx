@@ -36,7 +36,7 @@ export function PlanPanel({
   error,
 }: Props) {
   const requests = stats.patch_count;
-  const perJobLimit = status?.max_patches_per_job ?? Infinity;
+  const perJobLimit = status?.max_requests_per_book ?? Infinity;
   const budgetLeft = status?.remaining_requests ?? Infinity;
   const allowed = Math.min(perJobLimit, budgetLeft);
 
@@ -45,7 +45,7 @@ export function PlanPanel({
   const over = overJobLimit || overBudget;
   const nothingSelected = requests === 0;
 
-  const estimate = estimateSeconds(requests, requestsPerMinute, [], 1);
+  const estimate = estimateSeconds(requests, requestsPerMinute, []);
   const selectedCount = stats.chapters.filter((c) => c.patch !== null).length;
 
   return (
@@ -94,8 +94,8 @@ export function PlanPanel({
 
         {overJobLimit && (
           <p className={styles.budgetWarning}>
-            Over the {perJobLimit}-request limit for one translation. Deselect some chapters, or
-            raise “tokens per request” so more chapters fit in each one.
+            Over the {perJobLimit}-request limit for one translation. Deselect some chapters and
+            translate the rest afterwards.
           </p>
         )}
         {!overJobLimit && overBudget && (
