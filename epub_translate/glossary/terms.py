@@ -24,9 +24,9 @@ class Glossary:
 
     It starts as whatever the reader typed and grows as the book is translated:
     each response reports the terms it met, `merge` keeps the ones that are new,
-    and `prompt_section` sends them back out with the later batches that mention
+    and `prompt_section` sends them back out with the later patches that mention
     them. That loop is the point — chapter 40 has to call a character what
-    chapter 1 called them, and the model sees only one batch at a time.
+    chapter 1 called them, and the model sees only one patch at a time.
 
     First translation wins. A term already settled keeps its translation however
     the model renders it later, because an inconsistent name is the one thing a
@@ -59,7 +59,7 @@ class Glossary:
         Swap the whole glossary for `terms`, as the reader's editor does.
 
         Memory only: whoever calls this owns the file, and writes it in the same
-        breath. Takes effect on batches not yet sent.
+        breath. Takes effect on patches not yet sent.
         """
         with self._lock:
             self._terms = dict(terms)
@@ -97,11 +97,11 @@ class Glossary:
 
     def prompt_section(self, text: str) -> str:
         """
-        The glossary's half of the prompt for this batch.
+        The glossary's half of the prompt for this patch.
 
-        Only the terms the batch actually mentions travel with it: the glossary
+        Only the terms the patch actually mentions travel with it: the glossary
         grows all run, and sending all of it every time would spend the token
-        budget on names from chapters that aren't in this request.
+        budget on names from chapters that aren't in this patch.
         """
         return protocol.prompt_section(self._settled_terms(text))
 

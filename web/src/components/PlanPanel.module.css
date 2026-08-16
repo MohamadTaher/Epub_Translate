@@ -2,7 +2,20 @@
   display: flex;
   flex-direction: column;
   gap: var(--s6);
-  padding: var(--s7) 0 var(--s8);
+  padding: var(--s6) 0 var(--s8);
+}
+
+.actionBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s2);
+}
+
+.startButton {
+  min-height: 48px;
+  padding: 0 var(--s6);
+  font-size: var(--fs-body);
 }
 
 .startOver {
@@ -13,58 +26,28 @@
   border: 0;
   color: var(--clay);
   font-size: var(--fs-xs);
+  font-weight: 500;
   text-decoration: underline;
   text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.startOver:hover {
+  color: var(--clay-deep);
 }
 
 /* Stats */
 
-.stats {
+.statsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--s5);
-  padding: var(--s5) 0;
-  border-top: 1px solid var(--rule);
-  border-bottom: 1px solid var(--rule);
-}
-
-/* The request count is the number that moves as chapters are ticked, so it
-   dims briefly rather than jumping to a stale value. */
-.recalculating {
-  opacity: 0.4;
-  transition: opacity var(--dur-fast) var(--ease);
-}
-
-/* Budget */
-
-.budget {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s3);
-}
-
-.budgetLine {
-  display: flex;
-  justify-content: space-between;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--s4);
-  font-size: var(--fs-sm);
-  color: var(--ink-muted);
-  flex-wrap: wrap;
 }
 
-.budgetLine strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.budgetRight {
-  color: var(--ink-faint);
-}
-
-.budgetWarning {
-  font-size: var(--fs-sm);
-  color: var(--crimson);
-  max-width: var(--measure);
+.recalculating {
+  opacity: 0.35;
+  transition: opacity var(--dur-fast) var(--ease);
 }
 
 /* Sections */
@@ -81,6 +64,7 @@
   justify-content: space-between;
   gap: var(--s4);
   flex-wrap: wrap;
+  padding: 0 var(--s1);
 }
 
 .sectionMeta {
@@ -88,11 +72,13 @@
   color: var(--ink-faint);
 }
 
+.sectionMeta strong {
+  color: var(--ink);
+}
+
 /* Actions */
 
-/* Lives in the book header, so it carries only its own typography — the column
-   it sits in is BookHeader's. */
 .actionsNote {
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   color: var(--ink-muted);
 }

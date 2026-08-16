@@ -1,4 +1,4 @@
-"""Which glossary terms are worth sending with a given batch of chapters."""
+"""Which glossary terms are worth sending with a given patch."""
 
 from difflib import SequenceMatcher
 from typing import Dict

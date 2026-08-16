@@ -8,16 +8,22 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
-  background: var(--paper);
+  background-color: var(--paper);
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(245, 237, 224, 0.6) 0%, transparent 80%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(247, 235, 230, 0.4) 0%, transparent 60%);
+  background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: var(--fs-body);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
@@ -30,7 +36,8 @@ h4 {
   font-optical-sizing: auto;
   font-weight: 400;
   letter-spacing: -0.02em;
-  line-height: 1.15;
+  line-height: 1.18;
+  color: var(--ink);
   text-wrap: balance;
 }
 
@@ -66,6 +73,11 @@ a {
   color: var(--clay);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+a:hover {
+  color: var(--clay-deep);
 }
 
 /* One focus treatment everywhere, and only for keyboard users. */
@@ -73,6 +85,7 @@ a {
   outline: 2px solid var(--clay);
   outline-offset: 2px;
   border-radius: var(--r-sm);
+  box-shadow: 0 0 0 3px var(--clay-glow);
 }
 
 :focus:not(:focus-visible) {
@@ -98,10 +111,29 @@ a {
 
 ::selection {
   background: var(--clay-wash);
+  color: var(--clay-deep);
 }
 
-/* Scrollable panels keep the warm palette rather than defaulting to grey. */
+/* Scrollbars */
 * {
   scrollbar-color: var(--rule-strong) transparent;
   scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--rule-strong);
+  border-radius: var(--r-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
 }

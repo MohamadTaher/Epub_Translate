@@ -10,7 +10,17 @@ import { ActivityLog } from './ActivityLog';
 import { BookHeader } from './BookHeader';
 import { ChapterList } from './ChapterList';
 import { GlossaryEditor } from './GlossaryEditor';
-import { Button, Disclosure, Eyebrow, LinkButton, Meter, NoticeCallout } from './ui';
+import { PatchTrack } from './PatchTrack';
+import {
+  Button,
+  Disclosure,
+  DownloadIcon,
+  Eyebrow,
+  LinkButton,
+  NoticeCallout,
+  RefreshIcon,
+  StopIcon,
+} from './ui';
 import styles from './RunPanel.module.css';
 
 /** The same breakpoint the two-column layout uses in RunPanel.module.css. */
@@ -65,29 +75,29 @@ export function RunPanel({
   const running = job.status === 'running';
   const now = useSecondTicker(running);
 
-  // The log is one <details>: open and un-collapsible on a wide screen, closed
-  // and openable on a narrow one. Held in state rather than left to the DOM
-  // because this panel re-renders on every event, and an uncontrolled <details>
-  // would be argued with a few times a second.
   const narrow = useMediaQuery(NARROW);
   const [logOpen, setLogOpen] = useState(!narrow);
   useEffect(() => setLogOpen(!narrow), [narrow]);
 
   const stats = job.stats;
-  const completed = job.completed;
-  const total = job.total;
+  // The snapshot's counts only move when the run ends — mid-run they are the
+  // ones `/start` returned. The stream carries them as they change, and replays
+  // them in full on reconnect, so the higher of the two is the current one.
+  const completed = Math.max(job.completed, stream.completed);
+  const total = Math.max(job.total, stream.total);
   const remaining = Math.max(0, total - completed);
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   const canDownload = stream.hasOutput || completed > 0;
   const outcome = describeOutcome(job);
+  const termCount = Object.keys(glossary.terms).length;
 
   // The countdown from the last rate-limit wait, if it hasn't run out.
   const waitLeft = stream.rateLimit
     ? Math.max(0, Math.round(stream.rateLimit.seconds - (now - stream.rateLimit.startedAt) / 1000))
     : 0;
 
-  // Nothing is emitted while a worker sleeps on the rate limiter, so a long
-  // silence is itself worth reporting rather than leaving the bar looking stuck.
+  // Nothing is emitted while a worker sleeps on the rate limiter.
   const quietFor = running ? (now - stream.lastEventAt) / 1000 : 0;
   const stalled = running && !stream.rateLimit && quietFor > STALL_SECONDS;
 
@@ -96,19 +106,21 @@ export function RunPanel({
       <div className={styles.sticky}>
         <div className={styles.stickyInner}>
           {stats && (
-            <BookHeader
-              jobId={job.id}
-              book={stats.book}
-              sourceLanguage={stats.source_language}
-              targetLanguage={stats.target_language}
-              size="compact"
-            />
+            <div className={styles.bookSummary}>
+              <BookHeader
+                jobId={job.id}
+                book={stats.book}
+                sourceLanguage={stats.source_language}
+                targetLanguage={stats.target_language}
+                size="compact"
+              />
+            </div>
           )}
 
           <div className={styles.progress}>
             <div className={styles.progressLine}>
               <span className="tabular">
-                <strong>{completed}</strong> of {total} requests
+                <strong>{completed}</strong> of {total} patches ({percent}%)
               </span>
               {running && (
                 <span className={styles.eta}>
@@ -120,22 +132,36 @@ export function RunPanel({
                 </span>
               )}
             </div>
-            <Meter value={completed} max={Math.max(1, total)} />
+            <PatchTrack total={total} patches={stream.patches} />
           </div>
 
           <div className={styles.controls}>
             {canDownload && (
-              <LinkButton href={downloadUrl(job.id)} download variant={running ? 'secondary' : 'primary'}>
-                Download{running ? ' what’s done' : ''}
+              <LinkButton
+                href={downloadUrl(job.id)}
+                download
+                variant={running ? 'secondary' : 'primary'}
+                icon={<DownloadIcon />}
+              >
+                Download{running ? ' partial EPUB' : ' EPUB'}
               </LinkButton>
             )}
             {running && (
-              <Button variant="danger" onClick={onCancel} disabled={cancelling}>
+              <Button
+                variant="danger"
+                onClick={onCancel}
+                disabled={cancelling}
+                icon={<StopIcon />}
+              >
                 {cancelling ? 'Stopping…' : 'Stop'}
               </Button>
             )}
             {!running && (
-              <Button variant="secondary" onClick={onStartOver}>
+              <Button
+                variant="secondary"
+                onClick={onStartOver}
+                icon={<RefreshIcon />}
+              >
                 Translate another
               </Button>
             )}
@@ -144,21 +170,24 @@ export function RunPanel({
       </div>
 
       {waitLeft > 0 && (
-        <p className={styles.waiting} role="status">
+        <div className={styles.waiting} role="status">
           <span aria-hidden="true" className={styles.waitingGlyph}>
-            ◔
+            ⏳
           </span>
-          Waiting on the {stream.rateLimit?.reason ?? 'rate limit'} — <span className="tabular">{waitLeft}s</span>
-        </p>
+          <span>
+            Pacing delay for {stream.rateLimit?.reason ?? 'rate limit'} — resuming in{' '}
+            <strong className="tabular">{waitLeft}s</strong>
+          </span>
+        </div>
       )}
 
       {stalled && (
-        <p className={styles.waiting} role="status">
+        <div className={styles.waiting} role="status">
           <span aria-hidden="true" className={styles.waitingGlyph}>
-            ◔
+            ⏳
           </span>
-          Still working. Long gaps are normal while requests are spaced out.
-        </p>
+          <span>Still working. Spacing requests out according to API limits.</span>
+        </div>
       )}
 
       <NoticeCallout notice={outcome} />
@@ -166,31 +195,28 @@ export function RunPanel({
       <div className={styles.columns}>
         <div className={styles.column}>
           <div className={styles.columnHead}>
-            <Eyebrow>Chapters</Eyebrow>
-            <span className={styles.columnMeta}>grouped by request</span>
+            <Eyebrow>Chapters Progress</Eyebrow>
+            <span className={styles.columnMeta}>grouped by patch</span>
           </div>
-          {stats && <ChapterList chapters={stats.chapters} requests={stream.requests} />}
+          {stats && <ChapterList chapters={stats.chapters} patches={stream.patches} />}
         </div>
 
         <div className={styles.column}>
           <div className={styles.columnHead}>
-            <Eyebrow>Activity</Eyebrow>
+            <Eyebrow>Translation Console</Eyebrow>
+            <span className={styles.columnMeta}>every patch, as it happens</span>
           </div>
-          {/* One log, not two. Below the breakpoint its summary is the only way
-              in; above it, the summary is hidden and this stays open. Rendering
-              it twice put every line in the DOM twice and left two auto-scroll
-              effects fighting over the same events. */}
           <details open={logOpen} onToggle={(e) => setLogOpen(e.currentTarget.open)}>
-            <summary className={styles.logSummary}>Activity ({stream.events.length} lines)</summary>
-            <ActivityLog events={stream.events} />
+            <summary className={styles.logSummary}>Translation Console</summary>
+            <ActivityLog events={stream.events} live={running} />
           </details>
         </div>
       </div>
 
-      {/* Shown after the run as well as during it: by then the glossary holds
-          every name the book settled on, which is the thing worth exporting and
-          carrying into the next one. */}
-      <Disclosure summary="Glossary">
+      <Disclosure
+        summary="Translation Glossary & Terms"
+        badge={termCount > 0 ? `${termCount} term${termCount === 1 ? '' : 's'}` : undefined}
+      >
         <GlossaryEditor glossary={glossary} running={running} />
       </Disclosure>
     </section>

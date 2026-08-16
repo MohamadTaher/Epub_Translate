@@ -1,10 +1,106 @@
-.scroller {
-  max-height: 460px;
-  overflow-y: auto;
-  border: 1px solid var(--rule);
+.terminal {
+  border: 1px solid var(--terminal-border);
   border-radius: var(--r-md);
-  background: var(--surface);
+  background: var(--terminal-bg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.terminalHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 10px var(--s4);
+  background: var(--terminal-surface);
+  border-bottom: 1px solid var(--terminal-border);
+}
+
+.windowDots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+}
+
+.dotRed,
+.dotYellow,
+.dotGreen {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dotRed {
+  background: #e0524c;
+}
+
+.dotYellow {
+  background: #e6a83a;
+}
+
+.dotGreen {
+  background: #44aa66;
+}
+
+.lineCount {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  color: var(--terminal-faint);
+}
+
+.idleIndicator {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--terminal-muted);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--terminal-border);
+}
+
+.liveIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--sage);
+  background: rgba(45, 122, 75, 0.15);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(45, 122, 75, 0.3);
+}
+
+.livePulse {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 6px var(--sage);
+  animation: terminalPulse 1.8s infinite ease-in-out;
+}
+
+@keyframes terminalPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+}
+
+.scroller {
+  max-height: 480px;
+  overflow-y: auto;
   padding: var(--s3) 0;
+  scrollbar-color: var(--terminal-border) transparent;
 }
 
 .log {
@@ -12,53 +108,100 @@
   flex-direction: column;
 }
 
-.line {
-  display: grid;
-  grid-template-columns: 68px 1fr;
-  gap: var(--s3);
-  padding: var(--s1) var(--s4);
+.emptyState {
+  padding: var(--s5) var(--s4);
+  color: var(--terminal-faint);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  line-height: 1.6;
+  font-size: var(--fs-xs);
+  text-align: center;
 }
 
-.level {
-  text-align: right;
-  color: var(--ink-faint);
-  letter-spacing: 0.02em;
+.line {
+  display: grid;
+  grid-template-columns: 62px 78px 1fr;
+  gap: var(--s3);
+  align-items: baseline;
+  padding: 4px var(--s4);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.55;
+  transition: background 120ms ease;
+}
+
+.time {
+  color: var(--terminal-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.line:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.levelBadge {
+  display: inline-block;
+  text-align: center;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 3px;
   white-space: nowrap;
 }
 
+.badge-normal {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--terminal-muted);
+}
+
+.badge-muted {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--terminal-faint);
+}
+
+.badge-success {
+  background: rgba(45, 122, 75, 0.25);
+  color: #6ad08e;
+  border: 1px solid rgba(45, 122, 75, 0.4);
+}
+
+.badge-warning {
+  background: rgba(230, 168, 58, 0.2);
+  color: #f2bf64;
+  border: 1px solid rgba(230, 168, 58, 0.35);
+}
+
+.badge-error {
+  background: rgba(224, 82, 76, 0.25);
+  color: #ff7b75;
+  border: 1px solid rgba(224, 82, 76, 0.4);
+}
+
 .message {
-  color: var(--ink-muted);
+  color: var(--terminal-ink);
   overflow-wrap: anywhere;
 }
 
-.level-error .level,
+.level-muted .message {
+  color: var(--terminal-muted);
+}
+
 .level-error .message {
-  color: var(--crimson);
+  color: #ff9b96;
 }
 
-.level-warning .level,
 .level-warning .message {
-  color: var(--amber);
-}
-
-.level-success .level {
-  color: var(--sage);
+  color: #fce1a8;
 }
 
 .level-success .message {
-  color: var(--ink);
-}
-
-.level-muted .message {
-  color: var(--ink-faint);
+  color: #b7edc8;
 }
 
 @media (max-width: 560px) {
   .line {
-    grid-template-columns: 56px 1fr;
+    grid-template-columns: 52px 66px 1fr;
     gap: var(--s2);
+    padding: 3px var(--s3);
+    font-size: 0.6875rem;
   }
 }

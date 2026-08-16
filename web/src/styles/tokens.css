@@ -10,43 +10,69 @@
  */
 
 :root {
-  /* Surfaces */
-  --paper: #faf7f1;
-  --paper-sunken: #f2ede3;
+  /* Surfaces - Layered warm paper & clean cards */
+  --paper: #fbf9f5;
+  --paper-sunken: #f3ede2;
   --surface: #ffffff;
-  --rule: #e4ddd1;
-  --rule-strong: #cfc5b4;
+  --surface-raised: #ffffff;
+  --surface-translucent: rgba(255, 255, 255, 0.88);
+  --rule: #e8e1d5;
+  --rule-subtle: #f0eae0;
+  --rule-strong: #cec3b0;
 
-  /* Text */
-  --ink: #1c1917;          /* 15.0:1 */
-  --ink-muted: #6b6259;    /*  5.6:1 */
-  --ink-faint: #8a8076;    /*  3.6:1 — meta and decoration only, never body text */
+  /* Text & Ink */
+  --ink: #1a1614;          /* 16.0:1 */
+  --ink-muted: #5e5449;    /*  6.2:1 */
+  --ink-faint: #887e72;    /*  4.0:1 — meta, decoration & secondary chips */
 
-  /* Accent: fill and text both, 5.35:1 on paper and 5.7:1 under white */
-  --clay: #a64b31;
-  --clay-deep: #8a3b26;
-  --clay-wash: #f7ebe6;
+  /* Primary Accent: Terracotta / Warm Clay */
+  --clay: #b84e2a;
+  --clay-deep: #943b1c;
+  --clay-wash: #faede8;
+  --clay-glow: rgba(184, 78, 42, 0.16);
+  --clay-border: #ebd5cb;
 
-  /* Status. Clay and crimson are close in hue, so these never carry meaning
-     alone — every use is paired with a label or an accessible name. */
-  --sage: #4f6b52;         /* 5.5:1 */
-  --sage-wash: #eaf0ea;
-  --amber: #8a5f1b;        /* 5.3:1 */
-  --amber-wash: #f6eedf;
-  --crimson: #a02a22;      /* 6.9:1 */
-  --crimson-wash: #f8e7e4;
+  /* Status Colors */
+  --sage: #2d7a4b;         /* Success 6.1:1 */
+  --sage-deep: #205c37;
+  --sage-wash: #edf7f1;
+  --sage-border: #c8e8d4;
+
+  --amber: #a86a14;        /* Pacing/Waiting 5.6:1 */
+  --amber-deep: #84510c;
+  --amber-wash: #fdf5e8;
+  --amber-border: #fae0b8;
+
+  --crimson: #b53434;      /* Error/Alert 7.2:1 */
+  --crimson-deep: #8f2525;
+  --crimson-wash: #fcf0ee;
+  --crimson-border: #f7c9c7;
+
+  --indigo: #355f9e;       /* Info/System notes */
+  --indigo-wash: #eef4fc;
+  --indigo-border: #cddff7;
+
+  /* Terminal Surface */
+  --terminal-bg: #181615;
+  --terminal-surface: #22201e;
+  --terminal-border: #2e2b27;
+  --terminal-ink: #f5f2eb;
+  --terminal-muted: #9e9589;
+  --terminal-faint: #635d54;
 
   /* Type */
   --font-book: 'Literata Variable', 'Literata', Georgia, 'Times New Roman', serif;
   --font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Consolas', 'Liberation Mono', Menlo, monospace;
 
   --fs-display: clamp(2.25rem, 1.6rem + 2.2vw, 3.5rem);
+  --fs-h1: clamp(1.85rem, 1.4rem + 1.8vw, 2.75rem);
   --fs-h2: clamp(1.375rem, 1.2rem + 0.7vw, 1.75rem);
   --fs-h3: 1.125rem;
   --fs-body: 1rem;
   --fs-sm: 0.875rem;
   --fs-xs: 0.75rem;
+  --fs-micro: 0.6875rem;
 
   /* Space, on a 4px scale */
   --s1: 4px;
@@ -59,27 +85,27 @@
   --s8: 64px;
   --s9: 96px;
 
-  /* Shape */
-  --r-sm: 6px;
-  --r-md: 10px;
+  /* Shape & Elevation */
+  --r-xs: 4px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
   --r-pill: 999px;
-  --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.05), 0 12px 28px -18px rgba(28, 25, 23, 0.18);
-  --shadow-lift: 0 2px 4px rgba(28, 25, 23, 0.06), 0 18px 40px -20px rgba(28, 25, 23, 0.24);
+
+  --shadow-sm: 0 1px 2px rgba(26, 22, 20, 0.04), 0 2px 4px rgba(26, 22, 20, 0.02);
+  --shadow-card: 0 1px 3px rgba(26, 22, 20, 0.04), 0 12px 28px -10px rgba(26, 22, 20, 0.09);
+  --shadow-lift: 0 4px 12px rgba(26, 22, 20, 0.06), 0 20px 40px -14px rgba(184, 78, 42, 0.16);
+  --shadow-book: 0 4px 12px rgba(0, 0, 0, 0.14), 0 16px 32px -8px rgba(0, 0, 0, 0.22), -3px 0 6px rgba(0, 0, 0, 0.08);
 
   /* Measure */
   --page-max: 1120px;
   --measure: 68ch;
 
-  /* Breakpoints, named here for reading only — custom properties don't work in
-     media queries, so they are written out as literals where they are used.
-     900px is where the run panel drops to one column and its log collapses
-     (RunPanel.tsx matches that one in JS); 560px is where the book header, the
-     log rows and the upload panel tighten up; 520px is the app header. */
-
   /* Motion */
-  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
-  --dur-fast: 140ms;
-  --dur-panel: 220ms;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 150ms;
+  --dur-panel: 240ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

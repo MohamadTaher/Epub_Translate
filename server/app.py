@@ -81,7 +81,6 @@ def get_status(request: Request):
         'model': config.GEMINI_MODEL,
         'remaining_requests': budget.remaining_today(),
         'daily_budget': config.DAILY_REQUEST_BUDGET,
-        'max_requests_per_book': config.MAX_REQUESTS_PER_BOOK,
         'max_upload_mb': config.MAX_UPLOAD_MB,
         'cooldown_seconds': int(budget.cooldown_remaining(_client_ip(request)).total_seconds()),
         'busy': jobs.store.active_count() >= config.MAX_TRANSLATIONS_AT_ONCE,
@@ -155,13 +154,6 @@ def start_job(job_id: str, body: StartRequest):
 
     if planned_patches == 0:
         raise HTTPException(status_code=400, detail="No chapters selected to translate.")
-
-    if planned_patches > config.MAX_REQUESTS_PER_BOOK:
-        raise HTTPException(
-            status_code=413,
-            detail=f"This book needs {planned_patches} requests, over the {config.MAX_REQUESTS_PER_BOOK} "
-                   f"per-translation limit. Select fewer chapters.",
-        )
 
     if planned_patches > budget.remaining_today():
         raise HTTPException(

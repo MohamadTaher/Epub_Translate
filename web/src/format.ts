@@ -40,22 +40,33 @@ export function duration(seconds: number): string {
  * `requestsPerMinute` stands in for concurrency too.
  */
 export function estimateSeconds(
-  remainingRequests: number,
+  remainingPatches: number,
   requestsPerMinute: number,
   observedDurations: number[],
 ): number {
-  if (remainingRequests <= 0) return 0;
+  if (remainingPatches <= 0) return 0;
 
   const pace = Math.max(1, requestsPerMinute);
-  const rateLimited = (remainingRequests / pace) * 60;
+  const rateLimited = (remainingPatches / pace) * 60;
 
   if (observedDurations.length < 2) return rateLimited;
 
   const mean = observedDurations.reduce((a, b) => a + b, 0) / observedDurations.length;
-  const byPace = (remainingRequests / pace) * mean;
+  const byPace = (remainingPatches / pace) * mean;
 
   // Whichever constraint binds harder is the one that will actually be felt.
   return Math.max(rateLimited, byPace);
+}
+
+/**
+ * A log line's wall-clock time, "14:03:22".
+ *
+ * Pinned to en-GB rather than the reader's locale: a log column wants a fixed
+ * width and a 24-hour clock, not "2:03:22 PM".
+ */
+export function clockTime(epochSeconds: number | undefined): string {
+  if (typeof epochSeconds !== 'number') return '';
+  return new Date(epochSeconds * 1000).toLocaleTimeString('en-GB', { hour12: false });
 }
 
 /** Language names arrive lowercase from the server; titles read better. */

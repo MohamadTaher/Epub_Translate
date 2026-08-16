@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from 'react';
 import { eventsUrl } from '@/api';
-import type { JobEvent, JobSnapshot, RequestProgress } from '@/types';
+import type { JobEvent, JobSnapshot, PatchProgress } from '@/types';
 
 export interface RateLimitWait {
   seconds: number;
@@ -11,10 +11,17 @@ export interface RateLimitWait {
 
 export interface StreamState {
   events: JobEvent[];
-  /** Keyed by 1-based request number, as carried on the events. */
-  requests: Record<number, RequestProgress>;
-  /** Seconds each finished request took, for estimating what is left. */
+  /** Keyed by 1-based patch number, as carried on the events. */
+  patches: Record<number, PatchProgress>;
+  /** Seconds each finished patch took, for estimating what is left. */
   durations: number[];
+  /**
+   * Patches finished and planned, mirrored off the events exactly as
+   * `Job.publish` mirrors them server-side. The snapshot's own counts only move
+   * when the run ends, so during a run these are the only live ones.
+   */
+  completed: number;
+  total: number;
   rateLimit: RateLimitWait | null;
   /** True once anything translated has been saved, so downloading is worthwhile. */
   hasOutput: boolean;
@@ -25,8 +32,10 @@ export interface StreamState {
 
 export const empty: StreamState = {
   events: [],
-  requests: {},
+  patches: {},
   durations: [],
+  completed: 0,
+  total: 0,
   rateLimit: null,
   hasOutput: false,
   final: null,
@@ -38,13 +47,13 @@ export type Action =
   | { type: 'event'; event: JobEvent }
   | { type: 'end'; snapshot: JobSnapshot };
 
-function withRequest(
+function withPatch(
   state: StreamState,
   patch: number | undefined,
-  next: RequestProgress,
-): Record<number, RequestProgress> {
-  if (patch === undefined) return state.requests;
-  return { ...state.requests, [patch]: next };
+  next: PatchProgress,
+): Record<number, PatchProgress> {
+  if (patch === undefined) return state.patches;
+  return { ...state.patches, [patch]: next };
 }
 
 /** Exported for its tests; the hook below is the only production caller. */
@@ -66,30 +75,36 @@ export function reduce(state: StreamState, action: Action): StreamState {
 
       switch (event.event) {
         case 'patch_start':
-          next.requests = withRequest(state, event.patch, {
+          next.patches = withPatch(state, event.patch, {
             state: 'active',
             attempt: event.attempt ?? 1,
           });
-          // A request going out means whatever was blocking has cleared.
+          // A patch going out means whatever was blocking has cleared.
           next.rateLimit = null;
           break;
 
         case 'attempt_failed':
-          next.requests = withRequest(state, event.patch, {
+          next.patches = withPatch(state, event.patch, {
             state: 'active',
             attempt: (event.attempt ?? 0) + 1,
           });
           break;
 
+        case 'started':
+          next.total = event.total ?? state.total;
+          break;
+
         case 'patch_done':
-          next.requests = withRequest(state, event.patch, { state: 'done', attempt: 0 });
+          next.patches = withPatch(state, event.patch, { state: 'done', attempt: 0 });
+          next.completed = event.completed ?? state.completed + 1;
+          next.total = event.total ?? state.total;
           if (typeof event.seconds === 'number') {
             next.durations = [...state.durations, event.seconds];
           }
           break;
 
         case 'patch_failed':
-          next.requests = withRequest(state, event.patch, { state: 'failed', attempt: 0 });
+          next.patches = withPatch(state, event.patch, { state: 'failed', attempt: 0 });
           break;
 
         case 'saved':

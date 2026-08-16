@@ -5,25 +5,30 @@
   padding-bottom: var(--s8);
 }
 
-/* Sticky run header: the book, the progress and the two controls stay put while
-   the chapter list and log scroll. */
+/* Sticky run header */
 
 .sticky {
   position: sticky;
   top: 64px;
-  z-index: 10;
+  z-index: 15;
   margin: 0 calc(var(--s5) * -1);
-  padding: var(--s4) var(--s5);
-  background: color-mix(in srgb, var(--paper) 90%, transparent);
-  backdrop-filter: blur(8px);
+  padding: var(--s3) var(--s5);
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--rule);
+  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.03);
 }
 
 .stickyInner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(200px, 1.2fr) auto;
+  grid-template-columns: minmax(0, 1.1fr) minmax(220px, 1.4fr) auto;
   align-items: center;
   gap: var(--s5);
+}
+
+.bookSummary {
+  min-width: 0;
 }
 
 .progress {
@@ -31,13 +36,19 @@
   flex-direction: column;
   gap: var(--s2);
   min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  padding: var(--s2) var(--s4);
+  box-shadow: var(--shadow-sm);
 }
 
 .progressLine {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: var(--s3);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   color: var(--ink-muted);
 }
 
@@ -47,9 +58,13 @@
 }
 
 .eta {
-  color: var(--ink-faint);
-  font-size: var(--fs-xs);
+  color: var(--clay);
+  font-size: var(--fs-micro);
+  font-weight: 600;
   white-space: nowrap;
+  background: var(--clay-wash);
+  padding: 2px var(--s2);
+  border-radius: var(--r-pill);
 }
 
 .controls {
@@ -61,7 +76,7 @@
 @media (max-width: 900px) {
   .stickyInner {
     grid-template-columns: 1fr;
-    gap: var(--s4);
+    gap: var(--s3);
   }
 
   .controls {
@@ -74,24 +89,38 @@
 .waiting {
   display: flex;
   align-items: center;
-  gap: var(--s2);
+  gap: var(--s3);
   padding: var(--s3) var(--s4);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   background: var(--amber-wash);
-  color: var(--amber);
+  border: 1px solid var(--amber-border);
+  color: var(--amber-deep);
   font-size: var(--fs-sm);
+  box-shadow: var(--shadow-sm);
 }
 
 .waitingGlyph {
-  font-size: 1rem;
+  font-size: 1.125rem;
   line-height: 1;
+  animation: pulse 2s infinite ease-in-out;
 }
 
-/* Two columns: the log never pushes the chapters off screen. */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.75;
+  }
+}
+
+/* Two columns */
 
 .columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: var(--s5);
   align-items: start;
 }
@@ -108,15 +137,14 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--s3);
+  padding: 0 var(--s1);
 }
 
 .columnMeta {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-micro);
   color: var(--ink-faint);
 }
 
-/* Wide: the column head names the log, so its own summary is redundant. The
-   element stays a <details>, held open from RunPanel. */
 .logSummary {
   display: none;
 }
@@ -126,16 +154,19 @@
     grid-template-columns: 1fr;
   }
 
-  /* On a narrow screen the log collapses so the chapters stay in view, and the
-     summary takes over from the column head. */
   .logSummary {
     display: flex;
     align-items: center;
-    padding: var(--s3) 0;
+    padding: var(--s3) var(--s4);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-md);
     color: var(--clay);
     font-size: var(--fs-sm);
+    font-weight: 600;
     cursor: pointer;
     min-height: 44px;
+    box-shadow: var(--shadow-sm);
   }
 
   .column:last-child .columnHead {

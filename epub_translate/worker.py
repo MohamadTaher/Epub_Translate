@@ -1,10 +1,15 @@
 """
-Translating one batch of chapters: the prompt, the request, and what becomes of
-the reply.
+One patch: the chapters going into it, the prompt built around them, and what
+becomes of the reply.
 
 This is where a run spends its money, and where the decision to spend it again
 is made — a failed attempt is repeated only while repeating it can help, which
 `gemini.py` judges.
+
+A group of chapters is a *patch*, in the code and in what a reader is told
+alike. "Request" is kept for the API call itself — the per-minute limit and the
+daily budget count requests, and a patch that retries costs several of them, so
+the two are not interchangeable even though the happy path sends one each.
 """
 
 import time
@@ -16,7 +21,7 @@ from bs4 import BeautifulSoup
 from .book import Chapter, extract_chapter_title
 from .gemini import PatchError, describe_error, read_reply, retry_after, strip_code_fence
 from .glossary import Glossary, split_translation
-from .prompts import CHAPTER_SEPARATOR, build_translation_prompt
+from .prompts import CHAPTER_SEPARATOR, build_translation_prompt, split_chapters
 from .rate_limiter import RateLimiter
 from .run_state import GIVE_UP_AFTER_CONSECUTIVE_FAILURES, RunState
 from .tokens import count_tokens
@@ -48,12 +53,12 @@ class PatchResult:
 
 class PatchWorker:
     """
-    One batch of chapters, from prompt to translated chapters.
+    One patch, from prompt to translated chapters.
 
     A single instance serves the whole run: it is called from every thread in
     the pool at once and keeps nothing per-patch, because the model, the
     glossary and the rate limiter are shared by all of them and the counters
-    live in `RunState`. It exists to keep one batch's story in one place, not to
+    live in `RunState`. It exists to keep one patch's story in one place, not to
     own anything.
     """
 
@@ -69,13 +74,24 @@ class PatchWorker:
 
     def translate(self, patch: List[Chapter], patch_index: int) -> PatchResult:
         """
-        Translate one batch of chapters, retrying while retrying can help.
+        Translate one patch, retrying while retrying can help.
 
-        The prompt is built once: a retry is the same request again, and should
-        carry the glossary the first attempt did rather than a newer one.
+        The request is settled once: a retry asks the same question of the same
+        chapters, and carries the glossary the first attempt did rather than a
+        newer one.
+
+        The correction is the single thing a retry changes, and it is why a
+        retry is worth making at all where the model itself was at fault —
+        nothing else about an attempt differs from the one before it, so a reply
+        rejected for its shape would be produced again, identically, until the
+        attempts ran out. It is replaced only by a later failure that has its
+        own correction to offer: a 429 on attempt two says nothing about the
+        malformed reply from attempt one, which the model still needs telling
+        about on attempt three.
         """
         start_time = time.time()
-        prompt, estimated_tokens = self._build_request(patch)
+        glossary_section, combined_html, estimated_tokens = self._build_request(patch)
+        correction: Optional[str] = None
         last_error = "no attempt was made"
         attempts_made = 0
 
@@ -96,6 +112,8 @@ class PatchWorker:
             self.state.record_attempt()
 
             try:
+                prompt = build_translation_prompt(self.source_lang, self.target_lang,
+                                                  glossary_section, combined_html, correction)
                 parts, new_terms = self._send(prompt, patch, patch_index)
                 self._apply(patch, parts)
                 self._learn(new_terms, patch_index)
@@ -110,6 +128,10 @@ class PatchWorker:
 
             except Exception as error:
                 last_error = describe_error(error)
+                # Kept when this failure has nothing of its own to say, so a
+                # transport error between two attempts does not wipe what the
+                # model still needs to hear about its last reply.
+                correction = getattr(error, 'correction', None) or correction
                 self.emit('warning',
                           f"Patch {patch_index}/{self.state.total_patches} attempt "
                           f"{attempt + 1}/{MAX_ATTEMPTS_PER_PATCH} failed: {last_error}",
@@ -148,8 +170,19 @@ class PatchWorker:
         return PatchResult(patch_index=patch_index, success=False,
                            attempts=attempts_made, error=last_error)
 
-    def _build_request(self, patch: List[Chapter]) -> Tuple[str, int]:
-        """The prompt for one batch, and what it is expected to cost."""
+    def _build_request(self, patch: List[Chapter]) -> Tuple[str, str, int]:
+        """
+        The two halves of one patch's prompt, and what it is expected to cost.
+
+        Handed back unrendered because every attempt renders them again around
+        its own correction. Both are settled here all the same — the glossary is
+        read once, so the tenth attempt asks with the same terms the first one
+        did rather than with whatever other patches have since learned.
+
+        The estimate covers a correction without being recalculated for one:
+        `_PROMPT_OVERHEAD_TOKENS` is a thousand tokens of room for the prompt's
+        own wording, and the longest correction here runs to a fraction of that.
+        """
         combined_html = f"\n{CHAPTER_SEPARATOR}\n".join(ch.source_html for ch in patch)
         combined_text = BeautifulSoup(combined_html, 'html.parser').get_text()
 
@@ -158,10 +191,7 @@ class PatchWorker:
                          + count_tokens(glossary_section)
                          + _PROMPT_OVERHEAD_TOKENS)
 
-        prompt = build_translation_prompt(self.source_lang, self.target_lang,
-                                          glossary_section, combined_html)
-
-        return prompt, int(prompt_tokens * _REPLY_ALLOWANCE)
+        return glossary_section, combined_html, int(prompt_tokens * _REPLY_ALLOWANCE)
 
     def _send(self, prompt: str, patch: List[Chapter],
               patch_index: int) -> Tuple[List[str], Dict[str, str]]:
@@ -173,10 +203,16 @@ class PatchWorker:
         every chapter after it — the first is given two chapters' text merged
         together and the last silently keeps its original language, in a patch
         that would otherwise be recorded as a success.
+
+        An empty part is that same failure arriving with the right count, so it
+        is turned away in the same breath: `_apply` steps over one rather than
+        wiping a chapter, which leaves that chapter in its original language
+        while the patch reports success — the one outcome all of this exists to
+        prevent.
         """
         reply = strip_code_fence(read_reply(self.model.generate_content(prompt)).strip())
         translated_html, new_terms = split_translation(reply)
-        parts = translated_html.split(CHAPTER_SEPARATOR)
+        parts = split_chapters(translated_html)
 
         if len(parts) != len(patch):
             mismatch = f"asked for {len(patch)} chapters, got {len(parts)} back"
@@ -185,7 +221,28 @@ class PatchWorker:
                       f"can no longer be told apart — and asking again.",
                       event='patch_misaligned', patch=patch_index,
                       expected=len(patch), received=len(parts))
-            raise PatchError(mismatch)
+            raise PatchError(mismatch, correction=(
+                f"Your last reply divided into {len(parts)} chapter(s), but this request holds "
+                f"{len(patch)}. Reproduce all {len(patch) - 1} {CHAPTER_SEPARATOR} markers from "
+                f"the input, each on a line of its own, spelled exactly like that — the same "
+                f"Latin letters, not translated, not reworded, none added and none dropped. "
+                f"Count them in your reply before you send it."))
+
+        empty = [str(position) for position, part in enumerate(parts, 1) if not part.strip()]
+        if empty:
+            which = f"chapter {empty[0]}" if len(empty) == 1 else f"chapters {', '.join(empty)}"
+            blank = f"{which} of {len(patch)} came back empty"
+            self.emit('warning',
+                      f"Patch {patch_index}: {blank}. Discarding the response — the count is "
+                      f"right but that chapter would stay in its original language — and "
+                      f"asking again.",
+                      event='patch_incomplete', patch=patch_index,
+                      expected=len(patch), received=len(parts) - len(empty))
+            raise PatchError(blank, correction=(
+                f"Your last reply had the right number of chapters, but {which} of {len(patch)} "
+                f"was empty. Every chapter between the markers has to carry its own full "
+                f"translated HTML — no blank sections, no placeholders, nothing left out, however "
+                f"short the chapter looks."))
 
         return parts, new_terms
 

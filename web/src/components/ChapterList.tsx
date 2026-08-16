@@ -1,14 +1,12 @@
 import { Fragment } from 'react';
 import { MAX_ATTEMPTS } from '@/constants';
 import { tokens as formatTokens } from '@/format';
-import type { Chapter, RequestProgress, RequestState } from '@/types';
+import type { Chapter, PatchProgress, PatchState } from '@/types';
 import { useChapterGroups } from '@/useChapterGroups';
 import styles from './ChapterList.module.css';
 
 /**
- * The chapters, in book order, with the skipped ones left where they belong so a
- * reader can recognise their book. Rows are grouped under the request that will
- * translate them, which is the same numbering the progress events use.
+ * The chapters, in book order, with the skipped ones left where they belong.
  */
 interface Props {
   chapters: Chapter[];
@@ -18,33 +16,23 @@ interface Props {
     onToggle: (id: string) => void;
     onToggleMany: (ids: string[], next: boolean) => void;
   };
-  /** Present during a run: request number to its progress. */
-  requests?: Record<number, RequestProgress>;
+  /** Present during a run: patch number to its progress. */
+  patches?: Record<number, PatchProgress>;
 }
 
-const STATE_LABEL: Record<RequestState, string> = {
-  queued: 'Waiting',
+const STATE_LABEL: Record<PatchState, string> = {
+  queued: 'Queued',
   active: 'Translating',
-  done: 'Translated',
+  done: 'Completed',
   failed: 'Failed',
 };
 
-const STATE_GLYPH: Record<RequestState, string> = {
-  queued: '·',
-  active: '◐',
-  done: '✓',
-  failed: '✕',
-};
-
-export function ChapterList({ chapters, selection, requests }: Props) {
+export function ChapterList({ chapters, selection, patches }: Props) {
   const { groups, totals, members } = useChapterGroups(chapters);
 
   return (
     <ol className={styles.list}>
       {groups.map((group, index) => {
-        // Skipped chapters interleave with translated ones all through a book, so
-        // they get no band of their own — a repeated "not being translated"
-        // header every few rows is noise. The dimmed row and its reason say it.
         if (group.patch === null) {
           return group.chapters.map((chapter) => (
             <ChapterRow key={chapter.file_name || chapter.id} chapter={chapter} selection={selection} />
@@ -53,29 +41,44 @@ export function ChapterList({ chapters, selection, requests }: Props) {
 
         const ids = members.get(group.patch) ?? [];
         const allSelected = selection ? ids.every((id) => selection.selected.has(id)) : false;
-        const progress = requests?.[group.patch];
-        const state: RequestState = progress?.state ?? 'queued';
+        const progress = patches?.[group.patch];
+        const state: PatchState = progress?.state ?? 'queued';
+
+        const rows = group.chapters.map((chapter) => (
+          <ChapterRow
+            key={chapter.file_name || chapter.id}
+            chapter={chapter}
+            selection={selection}
+            state={patches ? state : undefined}
+          />
+        ));
+
+        // A patch split up by skipped chapters keeps the header it was
+        // introduced with; the later chapters just carry on beneath it.
+        if (!group.firstRun) {
+          return <Fragment key={`${group.patch}-${index}`}>{rows}</Fragment>;
+        }
 
         return (
           <Fragment key={`${group.patch}-${index}`}>
             <li className={styles.groupHeader}>
-              <span className={styles.groupTitle}>Request {group.patch}</span>
+              <div className={styles.groupHeaderLeft}>
+                <span className={styles.groupBadge}>Patch {group.patch}</span>
 
-              {!group.firstRun ? (
-                <span className={styles.groupMeta}>continued</span>
-              ) : requests ? (
-                <span className={`${styles.groupState} ${styles[`state-${state}`]}`}>
-                  {state === 'active' && progress && progress.attempt > 1
-                    ? `Retrying, attempt ${progress.attempt} of ${MAX_ATTEMPTS}`
-                    : STATE_LABEL[state]}
-                </span>
-              ) : (
-                <span className={styles.groupMeta}>
-                  <span className="tabular">{formatTokens(totals.get(group.patch) ?? 0)}</span> tokens
-                </span>
-              )}
+                {patches ? (
+                  <span className={`${styles.groupState} ${styles[`state-${state}`]}`}>
+                    {state === 'active' && progress && progress.attempt > 1
+                      ? `Retrying (${progress.attempt}/${MAX_ATTEMPTS})`
+                      : STATE_LABEL[state]}
+                  </span>
+                ) : (
+                  <span className={styles.groupTokens}>
+                    <span className="tabular">{formatTokens(totals.get(group.patch) ?? 0)}</span> tokens
+                  </span>
+                )}
+              </div>
 
-              {group.firstRun && selection && ids.length > 1 && (
+              {selection && ids.length > 1 && (
                 <button
                   type="button"
                   className={styles.groupToggle}
@@ -86,14 +89,7 @@ export function ChapterList({ chapters, selection, requests }: Props) {
               )}
             </li>
 
-            {group.chapters.map((chapter) => (
-              <ChapterRow
-                key={chapter.file_name || chapter.id}
-                chapter={chapter}
-                selection={selection}
-                state={requests ? state : undefined}
-              />
-            ))}
+            {rows}
           </Fragment>
         );
       })}
@@ -108,25 +104,30 @@ function ChapterRow({
 }: {
   chapter: Chapter;
   selection: Props['selection'];
-  state?: RequestState;
+  state?: PatchState;
 }) {
   const checked = selection?.selected.has(chapter.id) ?? false;
   const skipped = chapter.patch === null;
 
+  const statusIndicator = state && (
+    <span className={`${styles.statusBadge} ${styles[`status-${state}`]}`} aria-hidden="true">
+      {state === 'active' && <span className={styles.spinner} />}
+      {state === 'done' && '✓'}
+      {state === 'failed' && '✕'}
+      {state === 'queued' && '·'}
+    </span>
+  );
+
   const body = (
-    <>
-      {state && (
-        <span className={`${styles.glyph} ${styles[`state-${state}`]}`} aria-hidden="true">
-          {STATE_GLYPH[state]}
-        </span>
-      )}
+    <div className={styles.rowContent}>
+      {statusIndicator}
       <span className={styles.title}>{chapter.title}</span>
       {skipped && chapter.skip_reason && (
         <span className={styles.reason}>{humaniseReason(chapter.skip_reason)}</span>
       )}
-      <span className={`${styles.tokens} tabular`}>{formatTokens(chapter.tokens)}</span>
+      <span className={`${styles.tokens} tabular`}>{formatTokens(chapter.tokens)} tokens</span>
       {state && <span className="visually-hidden">{STATE_LABEL[state]}</span>}
-    </>
+    </div>
   );
 
   if (!selection) {
@@ -134,7 +135,7 @@ function ChapterRow({
   }
 
   return (
-    <li className={`${styles.row} ${styles.selectable} ${skipped && !checked ? styles.skipped : ''}`}>
+    <li className={`${styles.row} ${styles.selectable} ${skipped && !checked ? styles.skipped : ''} ${checked ? styles.selected : ''}`}>
       <label className={styles.label}>
         <input
           type="checkbox"

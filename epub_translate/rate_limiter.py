@@ -145,7 +145,7 @@ class RateLimiter:
                 logger.warning(
                     f"A single request is estimated at {tokens:,} tokens, more than the "
                     f"{self.max_tokens_per_minute:,}/minute budget. Sending it anyway — raise "
-                    f"TOKENS_PER_MINUTE, or lower TOKENS_PER_REQUEST to send smaller batches."
+                    f"TOKENS_PER_MINUTE, or lower TOKENS_PER_REQUEST to send smaller patches."
                 )
 
             self._requests.append(now)

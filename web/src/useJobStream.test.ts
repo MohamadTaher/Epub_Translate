@@ -22,18 +22,18 @@ describe('reduce', () => {
     expect(state.events.map((e) => e.message)).toEqual(['first', 'second']);
   });
 
-  it('treats a request going out as proof the rate limit has cleared', () => {
+  it('treats a patch going out as proof the rate limit has cleared', () => {
     const state = apply(waiting, event({ event: 'patch_start', patch: 1 }));
     expect(state.rateLimit).toBeNull();
-    expect(state.requests[1]).toEqual({ state: 'active', attempt: 1 });
+    expect(state.patches[1]).toEqual({ state: 'active', attempt: 1 });
   });
 
   it('counts a failed attempt as the next attempt, still active', () => {
     const state = apply(empty, event({ event: 'attempt_failed', patch: 2, attempt: 3 }));
-    expect(state.requests[2]).toEqual({ state: 'active', attempt: 4 });
+    expect(state.patches[2]).toEqual({ state: 'active', attempt: 4 });
   });
 
-  it('records how long each finished request took', () => {
+  it('records how long each finished patch took', () => {
     const state = apply(
       empty,
       event({ event: 'patch_done', patch: 1, seconds: 42 }),
@@ -42,12 +42,27 @@ describe('reduce', () => {
       event({ event: 'patch_done', patch: 3 }),
     );
     expect(state.durations).toEqual([42, 38]);
-    expect(state.requests[3]).toEqual({ state: 'done', attempt: 0 });
+    expect(state.patches[3]).toEqual({ state: 'done', attempt: 0 });
   });
 
-  it('marks a request failed once its retries run out', () => {
+  it('follows the counts the events carry, since the snapshot only moves at the end', () => {
+    const state = apply(
+      empty,
+      event({ event: 'started', total: 3 }),
+      event({ event: 'patch_done', patch: 1, completed: 1, total: 3 }),
+      event({ event: 'patch_done', patch: 2, completed: 2, total: 3 }),
+    );
+    expect(state).toMatchObject({ completed: 2, total: 3 });
+  });
+
+  it('counts a finished patch even when the event carries no total', () => {
+    const state = apply(empty, event({ event: 'patch_done', patch: 1 }));
+    expect(state.completed).toBe(1);
+  });
+
+  it('marks a patch failed once its retries run out', () => {
     const state = apply(empty, event({ event: 'patch_failed', patch: 1 }));
-    expect(state.requests[1]).toEqual({ state: 'failed', attempt: 0 });
+    expect(state.patches[1]).toEqual({ state: 'failed', attempt: 0 });
   });
 
   it('notes that something has been written, so downloading is worthwhile', () => {
@@ -64,10 +79,10 @@ describe('reduce', () => {
     expect(apply(waited, event({ event: 'rate_limit_done' })).rateLimit).toBeNull();
   });
 
-  it('leaves the requests alone for an event that names none', () => {
+  it('leaves the patches alone for an event that names none', () => {
     const started = apply(empty, event({ event: 'patch_start', patch: 1 }));
     const after = apply(started, event({ event: 'started' }), event({ level: 'error' }));
-    expect(after.requests).toBe(started.requests);
+    expect(after.patches).toBe(started.patches);
   });
 
   it('takes the final snapshot from `end`, and stops any countdown', () => {

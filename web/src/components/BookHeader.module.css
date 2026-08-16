@@ -1,39 +1,88 @@
 .header {
   display: flex;
   gap: var(--s5);
-  align-items: flex-start;
+  align-items: center;
   flex-wrap: wrap;
 }
 
-.coverFrame {
+.coverWrapper {
+  perspective: 600px;
   flex: none;
-  width: 108px;
+}
+
+.coverFrame {
+  position: relative;
+  width: 104px;
   aspect-ratio: 2 / 3;
-  border-radius: var(--r-sm);
+  border-radius: 4px 8px 8px 4px;
   overflow: hidden;
   background: var(--paper-sunken);
-  border: 1px solid var(--rule);
-  box-shadow: var(--shadow-card);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-book);
+  transform: rotateY(-4deg);
+  transition: transform var(--dur-panel) var(--ease), box-shadow var(--dur-panel) var(--ease);
+}
+
+.coverWrapper:hover .coverFrame {
+  transform: rotateY(0deg) translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.28);
+}
+
+/* Spine highlight: adds an authentic left book-spine crease */
+.spineHighlight {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 12px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.4) 0%,
+    rgba(0, 0, 0, 0.12) 60%,
+    transparent 100%
+  );
+  z-index: 2;
+  pointer-events: none;
 }
 
 .cover {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
-/* No cover art: a typographic plate rather than a broken image or empty box. */
+/* Typographic plate fallback */
 .plate {
   width: 100%;
   height: 100%;
   display: grid;
   place-items: center;
-  background: linear-gradient(160deg, var(--clay-wash), var(--paper-sunken));
+  background: linear-gradient(160deg, #fdf6f2 0%, var(--paper-sunken) 100%);
+  padding: var(--s2);
+}
+
+.plateInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s1);
+  border: 1px dashed var(--clay-border);
+  padding: var(--s3) var(--s2);
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.plateIcon {
+  font-size: 1.5rem;
 }
 
 .plateText {
   font-family: var(--font-book);
-  font-size: 1.75rem;
+  font-size: 1.375rem;
+  font-weight: 600;
   color: var(--clay);
   letter-spacing: -0.02em;
 }
@@ -44,32 +93,28 @@
   gap: var(--s2);
   flex: 1 1 14rem;
   min-width: 0;
-  padding-top: var(--s1);
-}
-
-/* The far end of the header band. Centred on the cover rather than hung off the
-   title: it acts on the book, not on its name, and the cover is the tallest
-   thing here — top-aligning it would leave a hole beside the author line. */
-.action {
-  flex: none;
-  align-self: center;
-  margin-left: auto;
-  max-width: 17rem;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--s2);
-  text-align: right;
 }
 
 .title {
-  font-size: 2rem;
+  font-size: clamp(1.75rem, 1.3rem + 1.2vw, 2.375rem);
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--ink);
   overflow-wrap: anywhere;
 }
 
 .author {
   color: var(--ink-muted);
   font-size: var(--fs-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.authorBy {
+  color: var(--ink-faint);
+  font-style: italic;
+  font-family: var(--font-book);
 }
 
 .languages {
@@ -78,42 +123,79 @@
   gap: var(--s2);
   align-self: flex-start;
   margin-top: var(--s1);
-  padding: var(--s1) var(--s3);
-  border-radius: var(--r-pill);
-  background: var(--paper-sunken);
+}
+
+.langPill {
   font-size: var(--fs-xs);
+  font-weight: 500;
   color: var(--ink-muted);
+  background: var(--paper-sunken);
+  border: 1px solid var(--rule);
+  padding: 3px var(--s3);
+  border-radius: var(--r-pill);
+}
+
+.targetLangPill {
+  color: var(--clay-deep);
+  background: var(--clay-wash);
+  border-color: var(--clay-border);
+  font-weight: 600;
 }
 
 .arrow {
   color: var(--ink-faint);
+  font-size: 0.875rem;
 }
 
-/* Compact: the sticky header during a run. */
+.action {
+  flex: none;
+  align-self: center;
+  margin-left: auto;
+  max-width: 18rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s2);
+  text-align: right;
+}
 
+/* Compact sticky version */
 .compact {
-  gap: var(--s4);
+  gap: var(--s3);
   align-items: center;
 }
 
 .compact .coverFrame {
-  width: 44px;
-  border-radius: 4px;
+  width: 40px;
+  border-radius: 3px;
+  transform: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.compact .spineHighlight {
+  width: 6px;
 }
 
 .compact .title {
-  font-size: 1.125rem;
+  font-size: 1.0625rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .compact .plateText {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
-/* Too narrow for three columns: the action takes a row of its own, full width,
-   which is the easier tap target anyway. */
+.compact .plateIcon {
+  display: none;
+}
+
+.compact .plateInner {
+  border: none;
+  padding: 0;
+}
+
 @media (max-width: 720px) {
   .action {
     flex: 1 0 100%;
@@ -126,10 +208,6 @@
 }
 
 @media (max-width: 560px) {
-  .title {
-    font-size: 1.5rem;
-  }
-
   .coverFrame {
     width: 76px;
   }

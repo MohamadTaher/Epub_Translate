@@ -13,32 +13,72 @@ Gemini-powered EPUB translator. A CLI (`translate_epub.py`) and a FastAPI backen
 ```
 # build / test / lint the frontend
 docker run --rm -v "${PWD}\web:/w" -w /w node:20-alpine sh -c "npm install && npm run build"
-
-# Vite dev server with hot reload, proxying to the API container
-docker run --rm -p 5173:5173 -v "${PWD}\web:/w" -w /w \
-  -e API_TARGET=http://host.docker.internal:7860 \
-  node:20-alpine sh -c "npm run dev -- --host"
 ```
 
 `npm run test` (vitest), `npm run lint` and `npm run typecheck` work the same way.
 Node 20 is the ceiling (`Dockerfile`), so don't pin tooling that wants Node 22.
 
-`docker-compose.override.yml` is merged in automatically: it mounts the working tree
-over `/app` and runs uvicorn with `--reload`. Python edits restart the server on their
-own; a frontend change needs the build above plus a browser refresh. Rebuild the image
-only when `requirements.txt` or `package.json` change. `.env` changes need
-`docker compose restart` — it is mounted, but read once at startup.
+## One port, and nothing to rebuild
+
+`docker-compose.override.yml` is merged in automatically, and the app is on
+<http://localhost:7860> whether or not it is. It mounts the working tree over `/app`
+and runs uvicorn with `--reload`, so Python edits restart the server on their own.
+
+In development that published port is the **`web` service**, a Vite dev server which
+forwards `/api` to `epub-translate:7860` over the compose network — so a frontend edit
+needs no `npm run build`: the open page updates itself, and a refresh always works.
+Deployed, the same port is uvicorn serving the `web/dist` the Dockerfile built. Two
+things hold that together and both look removable:
+
+- `ports: !reset []` on `epub-translate` in the override. Compose *appends* `ports`
+  when merging, so without it both services try to publish 7860 and neither starts.
+- Vite is published `7860:7860`, the same number inside and out, because the page
+  opens a hot-reload socket back to the port it was served from.
+
+`VITE_POLL=1` makes that watcher poll (`web/vite.config.ts`). A bind-mounted Windows
+directory delivers no file events into a Linux container, so without it nothing is
+ever seen to change and the page silently serves stale modules.
+
+Rebuild the image only when `requirements.txt` or `package.json` change. `.env`
+changes need `docker compose restart` — it is mounted, but read once at startup.
 
 That bind mount is what Cloud Run will not have, so a Dockerfile that stopped copying
 something still looks fine locally. Check with
 `docker compose -f docker-compose.yml up --build`, which leaves the override out.
 
-## Pacing settings
+## Two settings files, and only one of them is a constant
 
-`epub_translate/defaults.py` is the only module that reads the four pacing settings
-(model, requests/min, tokens/min, tokens/request) and loads `.env`. `server/config.py`
-re-exports them; `cli.py` uses them as argparse defaults. Don't re-spell the numbers
-anywhere else.
+`.env` holds `GEMINI_API_KEY` and nothing else. `settings.env` holds everything a
+running server might want retuned — model, pace, spend ceilings, upload limits — and
+`epub_translate/settings_file.py` re-reads it whenever its mtime or size moves.
+
+**Settings are not constants any more.** `defaults.py` and `server/config.py` both
+serve theirs from a module-level `__getattr__` (PEP 562), so `config.TOKENS_PER_REQUEST`
+still reads like an attribute at every call site but is evaluated *then*. Two things
+follow, and both fail silently:
+
+- **Read late.** `x = config.MAX_UPLOAD_MB` at module scope freezes the value at
+  import and quietly opts that setting out of being live. Read it where it is used.
+- **Never assign one of those names** in either module. A real attribute shadows
+  `__getattr__`, so the setting keeps working — frozen — with nothing to show for it.
+
+`defaults.py` still owns the four pacing settings and their defaults, and is still the
+only module that calls `load_dotenv`; `settings_file.py` knows about the file, not
+about which settings exist. `server/config.py` names its own limits and forwards the
+pacing ones. `cli.py` uses them as argparse defaults, which is a read at import — fine
+there, because the process is over in one run.
+
+Don't reach for `os.environ["GEMINI_API_KEY"]` directly: it is only populated once
+`defaults` has been imported, so that works by import order rather than by design.
+
+Precedence is `settings.env` → environment → built-in default, which is the reverse of
+`.env`. The file has to win or editing it would do nothing whenever a stale copy of the
+same key was left in `.env`. Cloud Run has no `settings.env` — the Dockerfile copies
+four paths and that is not one of them — so up there the environment carries it.
+
+`MAX_TRANSLATIONS_AT_ONCE` is the one setting that is only half live: the admission
+gate in `app.py` reads it per request, but it also sized the `ThreadPoolExecutor` in
+`jobs.py` at import, so raising it queues the extra runs until a restart.
 
 `REQUESTS_PER_MINUTE` does two jobs: it caps the rate limiter *and* sizes the worker
 pool. Requests take tens of seconds, so a larger pool would only park threads inside
@@ -46,7 +86,8 @@ the limiter.
 
 `gemini-3.1-pro` has a **zero** free-tier quota — a key without billing 429s on every
 request. `gemini-3.5-flash-lite` is the default in `defaults.py` and what
-`.env.example` ships, so a free-tier key works untouched; don't "upgrade" it casually.
+`settings.env.example` ships, so a free-tier key works untouched; don't "upgrade" it
+casually.
 
 A refused request backs off *every* worker (`RateLimiter.back_off`, driven by
 `gemini.retry_after`), using Google's stated retry delay when the error body has
@@ -65,6 +106,30 @@ answer, so the patch fails at once. `MAX_TOKENS` is fatal too, *including when t
 came back* — a truncated reply is the dangerous kind of wrong, plausible and cut off
 mid-chapter, and the fix is a smaller `TOKENS_PER_REQUEST`, not another attempt.
 Everything else retries.
+
+## A retry says what the last attempt got wrong
+
+`PatchError.retriable` decides whether to ask again; `PatchError.correction` decides
+what to say when asking. A correction is rendered into the next attempt's prompt as
+`# YOUR LAST ATTEMPT WAS REJECTED`, last of the instructions and directly above the
+input — the failures worth retrying at all are otherwise a closed loop, since the same
+prompt earns the same reply until the ten attempts are gone.
+
+**Only failures the model itself caused carry one.** A 429, a timeout or a dropped
+connection never reached the model, and accusing it of a reply it never sent puts a
+falsehood in the prompt and pays for it on every retry. Transport errors aren't
+`PatchError` at all, so `getattr(error, 'correction', None)` leaves them silent — but
+don't add corrections to `retry_after`'s cases by hand either.
+
+A correction is replaced only by a later failure carrying its own, never cleared: a
+429 on attempt two says nothing about the malformed reply from attempt one, which the
+model still has to be told about on attempt three.
+
+This is the one thing a retry changes. `worker._build_request` still settles the
+chapters and the glossary once, so the tenth attempt asks with the terms the first one
+had rather than whatever other patches have since learned — and the token estimate is
+not recomputed, because `_PROMPT_OVERHEAD_TOKENS` already reserves a thousand tokens
+and the longest correction is a fraction of that.
 
 Both flags live on `RunState` (`run_state.py`), which every worker shares and the
 translator exposes as properties, so `translator.should_stop = True` still works from
@@ -91,9 +156,17 @@ the tokens are structured so a dark one is a second block rather than a rewrite.
   when a job finishes, EventSource reconnects on close, and the job is terminal by
   then — it would replay the whole log and send `end` again, forever. See
   `web/src/useJobStream.ts`.
-- **The word is "request", not "patch".** The server calls a batch of chapters a
-  patch; the reader sees "request", because that is the unit the limits and the daily
-  budget are counted in. `ActivityLog.tsx` rewrites the server's wording.
+- **A group of chapters is a "patch", on both sides and on screen.** Identifiers,
+  event names (`patch_start`, `patch_done`, …), `stats.chapters[].patch`, the log
+  lines, `Patch 3 of 6` in the chapter list — all the same word. `ActivityLog.tsx`
+  shows the server's message as it arrives; the four regexes that used to rewrite
+  "patch" into "request" are gone, and nothing should replace them.
+- **"Request" means the API call**, and only that: `4 requests/min`, `12 requests
+  left in today's budget`, "the API rejected every request". It is not a synonym
+  for patch — the budget is charged per *attempt*, so a patch that retries three
+  times spends three requests. It is also what `request` means throughout
+  `server/` (FastAPI's `Request`), which is why it can't name the unit of work.
+  "Batch" is a third word for the same thing; don't.
 - Build output must land in `web/dist` — the Dockerfile copies it and `STATIC_DIR`
   points there. `server/app.py` mounts it only `if config.STATIC_DIR.exists()`,
   evaluated at import, so a build has to precede the server starting.
@@ -112,7 +185,7 @@ against Google.
 | `GET` | `/api/jobs/{id}` | Snapshot, for reconnecting after a dropped stream |
 | `GET` | `/api/jobs/{id}/events` | Server-sent events for the life of the run |
 | `GET` | `/api/jobs/{id}/cover` | The book's cover art, 404 when it has none |
-| `POST` | `/api/jobs/{id}/cancel` | Stop after in-flight batches finish; returns a snapshot |
+| `POST` | `/api/jobs/{id}/cancel` | Stop after in-flight patches finish; returns a snapshot |
 | `GET` | `/api/jobs/{id}/download` | Translated EPUB; valid mid-run too |
 | `GET`/`PUT` | `/api/jobs/{id}/glossary` | Read and replace glossary terms |
 
@@ -128,12 +201,20 @@ parse, and `EpubWriter` replaces its documents with translations in place. Extra
 chapters before making a writer, and note that `SourceBook.chapters()` returns fresh
 objects every call, because a run mutates them.
 
+`EpubWriter` adds an NCX and a nav document **only when the book has neither**
+(`_ensure_navigation`). Adding them unconditionally is the obvious thing and it
+produces a duplicate manifest id and a duplicate zip member on every save, which
+`zipfile` warns about and strict readers reject. Most EPUB3 books arrive with both.
+
 `/preview` packs the token counts already cached on the plan through the same
 `pack_by_tokens` that `/start` uses, so the two always agree. Don't reimplement the
-packing rule anywhere else.
+packing rule anywhere else. It renders through `Job.stats(plan)`, passing its own
+plan — a preview must never assign `job.plan`, even briefly: it used to swap the
+plan in and restore it, and a preview landing while `/start` was re-planning put the
+old plan back over the one the run then executed.
 
 Progress arrives only over the SSE stream — a run outlives any single request. The
-book is re-saved after every batch, so `/download` returns a valid partial EPUB at any
+book is re-saved after every patch, so `/download` returns a valid partial EPUB at any
 point. Every connection replays the job's whole event log before going live, so
 reconnecting loses nothing but duplicates everything. Rate-limiter waits emit
 `rate_limit_wait` / `rate_limit_done`; without them the UI can't tell waiting from
@@ -142,16 +223,17 @@ hung.
 ## The glossary teaches itself
 
 Every response carries a second payload after the translated HTML: `<!-- GLOSSARY -->`
-followed by a JSON object of the terms that batch met. Those merge into the glossary
+followed by a JSON object of the terms that patch met. Those merge into the glossary
 and travel back out with later requests whose chapters mention them — the model only
-ever sees one batch, so this is the only thing keeping a character's name steady from
+ever sees one patch, so this is the only thing keeping a character's name steady from
 chapter 1 to chapter 40.
 
 - **The marker and its parser are one contract**, so they live in one file
   (`glossary/protocol.py`). Changing the marker in one place alone loses every learned
-  term without failing anything. `CHAPTER_SEPARATOR` is in `prompts.py` for the same
-  reason: the instruction to preserve it and the string being preserved must move
-  together, or a batch silently collapses into its first chapter.
+  term without failing anything. `CHAPTER_SEPARATOR`, the instruction to preserve it
+  and `split_chapters` are in `prompts.py` for the same reason: the string asked for
+  and what counts as it coming back must move together, or a patch silently collapses
+  into its first chapter.
 - **`split_translation` runs before the `CHAPTER_SEPARATOR` split.** The other order
   lands the glossary JSON inside the last chapter's HTML.
 - **First translation wins.** A settled term keeps its translation however the model
@@ -163,16 +245,35 @@ chapter 1 to chapter 40.
 
 ## Replies are checked against the chapter count
 
-`prompts.py` states how many chapters are in the batch and how many
+`prompts.py` states how many chapters are in the patch and how many
 `CHAPTER_SEPARATOR` markers must come back; the worker discards a reply whose part
-count doesn't match and retries the attempt.
+count doesn't match (`patch_misaligned`) and retries the attempt.
 
 Parts are matched to chapters **by position**, so one missing separator shifts
 everything after it — the first chapter gets two chapters merged, the last ones keep
 their original language, and the patch records as a success. Losing a request to ask
 again is cheaper than a book that is quietly wrong and reports itself finished.
 
-The cost: a batch the model *consistently* miscounts burns all ten retries, and the
+**An empty part is rejected the same way** (`patch_incomplete`). It is the same
+failure arriving with the right count: `_apply` steps over a blank rather than wiping
+a chapter, so that chapter stays in its original language inside a patch that reports
+success — which is the one outcome all of this exists to prevent.
+
+The split itself is deliberately loose about spelling — `prompts.py:split_chapters`
+matches case-insensitively and takes the underscore as a space or a hyphen. The count
+check is the real guard, and a model that tidies `<!-- CHAPTER_SEPARATOR -->` into
+`<!--CHAPTER SEPARATOR-->` meant it as the marker; rejecting that spends a patch's
+whole ten attempts on punctuation. The prompt still asks for it exactly.
+
+**A marker that comes back translated is past saving**, because nothing is left to
+match — and it costs the whole patch, not one attempt, since the same prompt earns the
+same answer ten times. So the prompt forbids it twice: `# THE HTML` exempts comments
+from translation as a class, and `_reply_shape` names the marker a literal to copy in
+Latin letters. That wording is load-bearing — the surrounding rules read as an
+instruction to translate it, since an HTML comment is neither a tag nor an attribute
+("reproduce every tag exactly" misses it) and its contents *are* text.
+
+The cost: a patch the model *consistently* miscounts burns all ten retries, and the
 daily budget is charged per attempt (`budget.record_request`, called on `patch_start`).
 Nothing checks the budget mid-run, so that ceiling is enforced only at job start.
 
@@ -182,13 +283,14 @@ Nothing checks the budget mid-run, so that ceiling is enforced only at job start
 translate_epub.py    CLI entry point
 epub_translate/      translation core, shared by CLI and server
   cli.py             argument parsing
-  defaults.py        pacing settings, read from .env once
+  defaults.py        the pacing settings, and the API key read from .env once
+  settings_file.py   settings.env, re-read whenever it changes
   translator.py      wiring a run together, pacing it, and saving as it goes
   plan.py            what a run would involve, worked out before anything is spent
-  worker.py          one batch of chapters: the prompt, the request, the reply
+  worker.py          one patch: its prompt, its reply, and what becomes of it
   run_state.py       the counters every worker shares, and the rule for giving up
   gemini.py          sending a request, and judging whether a failure is worth retrying
-  packing.py         grouping chapters into the batches that become requests
+  packing.py         grouping chapters into patches, by token budget
   language.py        language codes, and script detection on plain text
   book/
     chapter.py       the Chapter dataclass, mutated in place as it is translated
@@ -197,9 +299,9 @@ epub_translate/      translation core, shared by CLI and server
   glossary/
     terms.py         the Glossary itself: what is known, and how it grows
     protocol.py      what the model is asked for, and the parser for its reply
-    matching.py      which terms are worth sending with a given batch
+    matching.py      which terms are worth sending with a given patch
     storage.py       the file on disk, and the one definition of its format
-  prompts.py         the prompt, and CHAPTER_SEPARATOR
+  prompts.py         the prompt, CHAPTER_SEPARATOR, and the split that reads it back
   rate_limiter.py    per-minute windows; a slot is reserved, not checked for
   tokens.py          token counting (cl100k_base, approximate for Gemini)
   console.py         colored terminal output, and the CLI's one question

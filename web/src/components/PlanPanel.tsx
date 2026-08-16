@@ -4,7 +4,7 @@ import type { GlossaryState } from '@/useGlossary';
 import { BookHeader } from './BookHeader';
 import { ChapterList } from './ChapterList';
 import { GlossaryEditor } from './GlossaryEditor';
-import { Button, Callout, Disclosure, Eyebrow, Meter, Stat } from './ui';
+import { ArrowRightIcon, Button, Callout, Disclosure, Eyebrow, Stat } from './ui';
 import styles from './PlanPanel.module.css';
 
 interface Props {
@@ -38,31 +38,24 @@ export function PlanPanel({
   requestsPerMinute,
   error,
 }: Props) {
-  const requests = stats.patch_count;
-  const perJobLimit = status?.max_requests_per_book ?? Infinity;
+  const patches = stats.patch_count ?? 0;
   const budgetLeft = status?.remaining_requests ?? Infinity;
-  const allowed = Math.min(perJobLimit, budgetLeft);
 
-  const overJobLimit = requests > perJobLimit;
-  const overBudget = requests > budgetLeft;
-  const over = overJobLimit || overBudget;
-  const nothingSelected = requests === 0;
+  const overBudget = patches > budgetLeft;
+  const over = overBudget;
+  const nothingSelected = patches === 0;
 
-  const estimate = estimateSeconds(requests, requestsPerMinute, []);
+  const estimate = estimateSeconds(patches, requestsPerMinute, []);
   const selectedCount = stats.chapters.filter((c) => c.patch !== null).length;
+  const termCount = Object.keys(glossary.terms).length;
 
   /**
    * The line under the button.
-   *
-   * The button sits above everything it depends on, so when it is disabled this
-   * has to say why — the meter and its warnings are further down the page, past
-   * the fold on a small screen.
    */
   function startNote(): string {
     if (nothingSelected) return 'Select at least one chapter below.';
-    if (overJobLimit) return `Over the ${perJobLimit}-request limit — deselect some chapters below.`;
-    if (overBudget) return `Only ${budgetLeft} requests left today — deselect some chapters below.`;
-    return `${requests} request${requests === 1 ? '' : 's'} · ${duration(estimate)}`;
+    if (overBudget) return `Only ${budgetLeft} requests left today — deselect some chapters.`;
+    return `${patches} patch${patches === 1 ? '' : 'es'} · ${duration(estimate)}`;
   }
 
   return (
@@ -73,20 +66,24 @@ export function PlanPanel({
         sourceLanguage={stats.source_language}
         targetLanguage={stats.target_language}
         action={
-          <>
+          <div className={styles.actionBlock}>
             <Button
               variant="primary"
+              size="lg"
+              icon={<ArrowRightIcon />}
+              iconPosition="right"
               onClick={onStart}
               disabled={starting || over || nothingSelected}
+              className={styles.startButton}
             >
-              {starting ? 'Starting…' : 'Start translating'}
+              {starting ? 'Starting translation…' : 'Start translating'}
             </Button>
             <p className={styles.actionsNote}>{startNote()}</p>
-          </>
+          </div>
         }
       >
         <button type="button" className={styles.startOver} onClick={onStartOver}>
-          Choose a different book or language
+          ← Choose a different book or language
         </button>
       </BookHeader>
 
@@ -104,48 +101,40 @@ export function PlanPanel({
         </Callout>
       )}
 
-      <div className={styles.stats}>
-        <Stat value={`${selectedCount} of ${stats.chapter_count}`} label="Chapters" />
+      <div className={styles.statsGrid}>
         <Stat
-          value={
-            <span className={previewing ? styles.recalculating : undefined}>{requests}</span>
-          }
-          label="Requests"
+          label="Chapters"
+          value={`${selectedCount} of ${stats.chapter_count}`}
+          subtext="in queue"
+          icon="📖"
         />
-        <Stat value={formatTokens(stats.total_tokens)} label="Tokens" />
-        <Stat value={requests > 0 ? duration(estimate) : '—'} label="Estimated" />
-      </div>
-
-      <div className={styles.budget}>
-        <div className={styles.budgetLine}>
-          <span>
-            <strong className="tabular">{requests}</strong> of {perJobLimit} requests per translation
-          </span>
-          <span className={styles.budgetRight}>
-            <span className="tabular">{budgetLeft}</span> left in today’s budget
-          </span>
-        </div>
-        <Meter value={requests} max={Number.isFinite(allowed) ? allowed : requests} over={over} />
-
-        {overJobLimit && (
-          <p className={styles.budgetWarning}>
-            Over the {perJobLimit}-request limit for one translation. Deselect some chapters and
-            translate the rest afterwards.
-          </p>
-        )}
-        {!overJobLimit && overBudget && (
-          <p className={styles.budgetWarning}>
-            Only {budgetLeft} requests are left today. Deselect some chapters, or come back after
-            the budget resets at midnight UTC.
-          </p>
-        )}
+        <Stat
+          label="Patches"
+          value={
+            <span className={previewing ? styles.recalculating : undefined}>{patches}</span>
+          }
+          subtext="API calls"
+          icon="⚡"
+        />
+        <Stat
+          label="Tokens"
+          value={formatTokens(stats.total_tokens)}
+          subtext="approx volume"
+          icon="🪙"
+        />
+        <Stat
+          label="Estimated Time"
+          value={patches > 0 ? duration(estimate) : '—'}
+          subtext={patches > 0 ? `paced @ ${requestsPerMinute}/min` : 'select chapters'}
+          icon="⏱️"
+        />
       </div>
 
       <div className={styles.section}>
         <div className={styles.sectionHead}>
-          <Eyebrow>Chapters</Eyebrow>
+          <Eyebrow>Chapters to Translate</Eyebrow>
           <span className={styles.sectionMeta}>
-            in book order · {selectedCount} selected
+            in book order · <strong>{selectedCount}</strong> selected
           </span>
         </div>
         <ChapterList
@@ -154,7 +143,10 @@ export function PlanPanel({
         />
       </div>
 
-      <Disclosure summary="Glossary">
+      <Disclosure
+        summary="Translation Glossary & Names"
+        badge={termCount > 0 ? `${termCount} term${termCount === 1 ? '' : 's'}` : undefined}
+      >
         <GlossaryEditor glossary={glossary} running={false} />
       </Disclosure>
     </section>

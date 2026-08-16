@@ -87,7 +87,15 @@ class Job:
         return f"{stem} ({self.options.get('target_lang', 'translated')}).epub"
 
     def publish(self, event: Dict):
-        """Record an event and fan it out to anyone watching."""
+        """
+        Record an event and fan it out to anyone watching.
+
+        Stamped here rather than in the browser, because every connection
+        replays the whole log at once: a client-side clock would date the
+        entire run to the moment someone reconnected.
+        """
+        event.setdefault('at', time.time())
+
         with self.lock:
             if event.get('event') == 'patch_done':
                 self.completed = event.get('completed', self.completed)
@@ -133,20 +141,27 @@ class Job:
                 'stats': self.stats(),
             }
 
-    def stats(self) -> Optional[Dict]:
+    def stats(self, plan: Optional[TranslationPlan] = None) -> Optional[Dict]:
         """
-        The plan, as one list of chapters in book order.
+        A plan, as one list of chapters in book order.
 
         Kept in book order, with the skipped ones left in place, so a reader can
         recognise their book in the list. `patch` is the number the progress
         events use, which is what lets a chapter be shown as translated.
+
+        Defaults to the job's own plan. `preview` passes one the job has not
+        adopted — which is why this takes an argument rather than reading
+        `self.plan`: swapping the job's plan out and back, even briefly, means a
+        preview landing at the same moment as `/start` can put the old plan back
+        over the one the run is about to execute.
         """
-        if not self.plan:
+        plan = self.plan if plan is None else plan
+        if not plan:
             return None
 
         patch_of = {
             id(chapter): index + 1
-            for index, patch in enumerate(self.plan.patches)
+            for index, patch in enumerate(plan.patches)
             for chapter in patch
         }
 
@@ -157,10 +172,10 @@ class Job:
                 'has_cover': bool(self.cover_name),
                 'filename': self.original_filename,
             },
-            'chapter_count': len(self.plan.chapters),
-            'patch_count': len(self.plan.patches),
-            'total_tokens': self.plan.total_tokens,
-            'source_language': self.plan.source_language,
+            'chapter_count': len(plan.chapters),
+            'patch_count': len(plan.patches),
+            'total_tokens': plan.total_tokens,
+            'source_language': plan.source_language,
             'target_language': self.options.get('target_lang', ''),
             'chapters': [
                 {
@@ -174,7 +189,7 @@ class Job:
                         else chapter.skip_reason or "Not selected"
                     ),
                 }
-                for chapter in self.plan.chapters
+                for chapter in plan.chapters
             ],
         }
 
@@ -250,14 +265,9 @@ class JobStore:
             source_language=job.plan.source_language,
         )
 
-        # stats() reads whichever plan is on the job, so swap the preview in just
-        # long enough to render it. The real plan is never replaced.
-        with job.lock:
-            real_plan, job.plan = job.plan, preview_plan
-            try:
-                return job.stats()
-            finally:
-                job.plan = real_plan
+        # Rendered without going anywhere near `job.plan`: a preview is a
+        # question, and nothing about asking it may touch what the job would run.
+        return job.stats(preview_plan)
 
     def replan(self, job: Job, only_chapter_ids: Optional[Set[str]] = None) -> int:
         """
@@ -298,7 +308,7 @@ class JobStore:
                 # It stopped itself rather than being cancelled, and `should_stop`
                 # is set either way — so this has to be asked about first.
                 job.status = "failed"
-                job.error = "Too many requests failed in a row. The API may be down."
+                job.error = "Too many patches failed in a row. The API may be down."
             elif job.translator.should_stop:
                 job.status = "cancelled"
             elif job.total and job.completed == 0:

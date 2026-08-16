@@ -5,7 +5,7 @@ Nothing here holds any state or knows what a chapter is. It exists because the
 interesting part of a failed request is *whether asking again could possibly
 help*, and getting that wrong is expensive in both directions: retrying a
 refusal spends ten requests to be told the same thing ten times, and giving up
-on a hiccup loses a batch that would have worked on the second try.
+on a hiccup loses a patch that would have worked on the second try.
 """
 
 import re
@@ -26,23 +26,31 @@ _HOPELESS = {
     "SPII": "the model saw what it took for personal information in these chapters",
     "RECITATION": "the model stopped, saying it was reciting copyrighted material",
     "LANGUAGE": "the model does not support this language pair",
-    "MAX_TOKENS": ("the reply hit the model's output limit and was cut off — the batch is too "
+    "MAX_TOKENS": ("the reply hit the model's output limit and was cut off — the request is too "
                    "big to answer in one go, so lower TOKENS_PER_REQUEST"),
 }
 
 
 class PatchError(Exception):
     """
-    One failed attempt at a batch.
+    One failed attempt at a patch.
 
     `retriable` is the whole point of the class: a caller in a retry loop needs
     to know the difference between "the network hiccuped" and "this will be
     refused every time until the end of the world".
+
+    `correction` is what the *next* attempt should tell the model about this
+    one, and only the failures the model itself caused carry it. A malformed
+    reply is otherwise a loop with nothing to break it — the same prompt earns
+    the same answer until the attempts run out — while a 429 or a dropped
+    connection never reached the model at all, and accusing it of a reply it
+    never sent is a lie in the prompt that costs tokens on every retry.
     """
 
-    def __init__(self, message: str, retriable: bool = True):
+    def __init__(self, message: str, retriable: bool = True, correction: Optional[str] = None):
         super().__init__(message)
         self.retriable = retriable
+        self.correction = correction
 
 
 def read_reply(response) -> str:
@@ -77,7 +85,9 @@ def read_reply(response) -> str:
         raise PatchError(_HOPELESS["MAX_TOKENS"], retriable=False)
 
     if not text or not text.strip():
-        raise PatchError("the API returned an empty reply")
+        raise PatchError("the API returned an empty reply",
+                         correction="Your last reply was empty. Return the translated HTML for "
+                                    "every chapter in the input.")
 
     return text
 

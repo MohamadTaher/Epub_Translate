@@ -11,7 +11,6 @@ export interface Status {
   model: string;
   remaining_requests: number;
   daily_budget: number;
-  max_requests_per_book: number;
   max_upload_mb: number;
   /** Seconds until this visitor may start another translation; 0 when free. */
   cooldown_seconds: number;
@@ -30,7 +29,14 @@ export interface Chapter {
   title: string;
   file_name: string;
   tokens: number;
-  /** 1-based request number, matching the `patch` field on progress events. Null when skipped. */
+  /**
+   * 1-based number of the patch that translates this chapter, matching the
+   * `patch` field on progress events. Null when the chapter is skipped.
+   *
+   * A patch is a group of chapters sent together. It is called that everywhere,
+   * including on screen; "request" is kept for the API call it becomes, which
+   * is what the rate limit and the daily budget count. See CLAUDE.md.
+   */
   patch: number | null;
   /** Why this chapter is not being translated, or null when it is. */
   skip_reason: string | null;
@@ -58,7 +64,7 @@ export interface JobSnapshot {
   id: string;
   status: JobStatus;
   error: string | null;
-  /** Requests finished and planned — not chapters. */
+  /** Patches finished and planned — not chapters. */
   completed: number;
   total: number;
   stats: JobStats | null;
@@ -75,6 +81,8 @@ export interface JobEvent {
   level: string;
   message: string;
   event?: string;
+  /** Unix seconds, stamped by the server as the event was published. */
+  at?: number;
   total?: number;
   completed?: number;
   patch?: number;
@@ -82,6 +90,14 @@ export interface JobEvent {
   successful?: number;
   seconds?: number;
   reason?: string;
+  /**
+   * On `patch_misaligned` and `patch_incomplete`: how many chapters went out,
+   * and how many usable ones came back.
+   */
+  expected?: number;
+  received?: number;
+  /** On `glossary_learned`: terms this reply taught, and the size of the glossary now. */
+  added?: number;
 }
 
 export type Glossary = Record<string, string>;
@@ -89,7 +105,7 @@ export type Glossary = Record<string, string>;
 /* Derived ------------------------------------------------------------------ */
 
 /**
- * Language is the only thing a visitor chooses. Pace and batch size are the
+ * Language is the only thing a visitor chooses. Pace and patch size are the
  * server owner's to set in .env, since it is their quota being spent.
  */
 export interface UploadSettings {
@@ -97,10 +113,10 @@ export interface UploadSettings {
   target_lang: string;
 }
 
-export type RequestState = 'queued' | 'active' | 'done' | 'failed';
+export type PatchState = 'queued' | 'active' | 'done' | 'failed';
 
-/** Where one request has got to, as worked out from the event stream. */
-export interface RequestProgress {
-  state: RequestState;
+/** Where one patch has got to, as worked out from the event stream. */
+export interface PatchProgress {
+  state: PatchState;
   attempt: number;
 }

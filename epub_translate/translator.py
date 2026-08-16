@@ -6,15 +6,17 @@ carries out a plan. They are separate because the server shows a reader the plan
 and waits for them to agree to it; the CLI joins them back together in
 `translate_book`.
 
-One worker per request, `REQUESTS_PER_MINUTE` of them at once, each translating
-one batch of chapters and mutating those chapters in place. The book is re-saved
-after every batch that lands, so a run that dies halfway leaves a readable book
-behind.
+A *patch* is a group of chapters translated together, and that is what it is
+called throughout — in the code, in the events, and in what a reader is shown.
+"Request" is reserved for the API call: `REQUESTS_PER_MINUTE` of them go out at
+once, the daily budget counts them, and a patch that retries spends several. The
+book is re-saved after every patch that lands, so a run that dies halfway leaves
+a readable book behind.
 
 The parts that are their own subject live next door: `plan.py` works out what a
-run would involve, `worker.py` carries out one batch of it, `run_state.py` holds
-the counters they share, and `gemini.py` judges whether a failed attempt is
-worth repeating.
+run would involve, `worker.py` carries out one patch, `run_state.py` holds the
+counters they share, and `gemini.py` judges whether a failed attempt is worth
+repeating.
 """
 
 import signal
@@ -42,11 +44,11 @@ __all__ = ["EPUBTranslator", "TranslationPlan"]
 class EPUBTranslator:
     """
     Translates an EPUB with Gemini: concurrent requests, rate limiting,
-    auto-save after every batch, and a glossary that grows as it goes.
+    auto-save after every patch, and a glossary that grows as it goes.
 
     One instance runs one book. `should_stop` may be set from any thread — that
     is what `/cancel` and Ctrl+C both do — and is honoured between attempts and
-    inside rate-limit waits, so in-flight requests finish and are saved.
+    inside rate-limit waits, so in-flight patches finish and are saved.
     """
 
     # The pacing defaults come from .env by way of `defaults`, the same values the
@@ -273,8 +275,9 @@ class EPUBTranslator:
                 for i, patch in enumerate(patches)
             ]
 
-            self._emit('concurrency', f"Starting batch of {min(self.requests_per_minute, len(patches))} "
-                                      f"patches. {len(patches)} total in queue")
+            self._emit('concurrency', f"Sending {min(self.requests_per_minute, len(patches))} at a "
+                                      f"time. {len(patches)} patch{'' if len(patches) == 1 else 'es'} "
+                                      f"in the queue")
 
             for future in as_completed(futures):
                 # Once, not once per remaining future: this used to repeat the

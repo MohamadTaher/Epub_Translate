@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { duration, estimateSeconds, fileSize, languageLabel, tokens } from '@/format';
+import { clockTime, duration, estimateSeconds, fileSize, languageLabel, tokens } from '@/format';
+
+describe('clockTime', () => {
+  it('is blank when the event carried no timestamp', () => {
+    expect(clockTime(undefined)).toBe('');
+  });
+
+  it('is a fixed-width 24-hour clock, whatever the reader\'s locale', () => {
+    // Not asserting the hour: the value is rendered in the reader's timezone.
+    expect(clockTime(Date.UTC(2024, 0, 1, 14, 3, 22) / 1000)).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  });
+});
 
 describe('tokens', () => {
   it('counts under a thousand exactly', () => {

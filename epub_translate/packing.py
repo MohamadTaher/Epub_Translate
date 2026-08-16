@@ -1,6 +1,9 @@
 """
-Grouping chapters into patches — the batches of chapters that become one API
-request each.
+Grouping chapters into patches — one patch is one API request, holding as many
+chapters as fit under the token limit.
+
+A patch is what it is called everywhere, including in the UI. "Request" means
+the API call it becomes — the thing the rate limit and the budget count. See CLAUDE.md.
 
 Kept apart from the EPUB itself because the server packs a plan it has already
 read: re-costing a reader's chapter selection goes through `pack_by_tokens`
@@ -14,7 +17,7 @@ from .book import Chapter
 T = TypeVar("T")
 
 PATCH_OVERHEAD_TOKENS = 500      # room for the prompt wrapped around every patch
-PATCH_SEPARATOR_TOKENS = 50      # the marker joining two chapters within a patch
+CHAPTER_SEPARATOR_TOKENS = 50      # the marker joining two chapters within a patch
 
 
 def pack_by_tokens(items: Sequence[Tuple[T, int]], max_tokens_per_patch: int) -> List[List[T]]:
@@ -27,7 +30,7 @@ def pack_by_tokens(items: Sequence[Tuple[T, int]], max_tokens_per_patch: int) ->
     charged for — so this rule lives here and nowhere else.
 
     An item larger than the limit still gets a patch of its own; splitting a
-    chapter mid-way would break the translation, so an oversized request is the
+    chapter mid-way would break the translation, so an oversized patch is the
     lesser problem.
     """
     patches: List[List[T]] = []
@@ -35,7 +38,7 @@ def pack_by_tokens(items: Sequence[Tuple[T, int]], max_tokens_per_patch: int) ->
     current_tokens = PATCH_OVERHEAD_TOKENS
 
     for item, item_tokens in items:
-        separator_tokens = PATCH_SEPARATOR_TOKENS if current_patch else 0
+        separator_tokens = CHAPTER_SEPARATOR_TOKENS if current_patch else 0
 
         if current_patch and current_tokens + separator_tokens + item_tokens > max_tokens_per_patch:
             patches.append(current_patch)

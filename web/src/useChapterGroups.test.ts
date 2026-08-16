@@ -12,7 +12,7 @@ const chapter = (id: string, patch: number | null, tokens: number): Chapter => (
 });
 
 describe('plan', () => {
-  it('groups consecutive chapters that share a request, in book order', () => {
+  it('groups consecutive chapters that share a patch, in book order', () => {
     const { groups } = plan([chapter('a', 1, 100), chapter('b', 1, 100), chapter('c', 2, 100)]);
     expect(groups.map((g) => [g.patch, g.chapters.map((c) => c.id)])).toEqual([
       [1, ['a', 'b']],
@@ -20,9 +20,9 @@ describe('plan', () => {
     ]);
   });
 
-  it('totals a request across the whole book, not per contiguous run', () => {
-    // A skipped chapter in the middle splits request 1 into two runs. Either run
-    // alone would understate what the request costs.
+  it('totals a patch across the whole book, not per contiguous run', () => {
+    // A skipped chapter in the middle splits patch 1 into two runs. Either run
+    // alone would understate what the patch costs.
     const { groups, totals, members } = plan([
       chapter('a', 1, 100),
       chapter('skipped', null, 900),
@@ -34,7 +34,7 @@ describe('plan', () => {
     expect(members.get(1)).toEqual(['a', 'c']);
   });
 
-  it('marks only the first run of a request, so the header appears once', () => {
+  it('marks only the first run of a patch, so the header appears once', () => {
     const { groups } = plan([
       chapter('a', 1, 100),
       chapter('skipped', null, 900),

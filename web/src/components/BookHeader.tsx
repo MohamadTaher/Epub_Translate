@@ -6,10 +6,6 @@ import styles from './BookHeader.module.css';
 
 /**
  * The book itself, so a reader recognises what they uploaded.
- *
- * Plenty of EPUBs carry no cover and some carry no title, so every part of this
- * has a fallback — the typographic plate is used often enough to be a real state,
- * not an edge case.
  */
 export function BookHeader({
   jobId,
@@ -25,11 +21,6 @@ export function BookHeader({
   sourceLanguage: string;
   targetLanguage: string;
   size?: 'large' | 'compact';
-  /**
-   * What the reader came here to do, given the end of the header band rather
-   * than a row of its own — the cover leaves that space empty, and an action on
-   * the book belongs beside the book.
-   */
   action?: React.ReactNode;
   children?: React.ReactNode;
 }) {
@@ -39,32 +30,44 @@ export function BookHeader({
 
   return (
     <div className={`${styles.header} ${size === 'compact' ? styles.compact : ''}`}>
-      <div className={styles.coverFrame}>
-        {showCover ? (
-          <img
-            className={styles.cover}
-            src={coverUrl(jobId)}
-            alt={`Cover of ${title}`}
-            onError={() => setCoverFailed(true)}
-          />
-        ) : (
-          <div className={styles.plate} aria-hidden="true">
-            <span className={styles.plateText}>{initials(title)}</span>
-          </div>
-        )}
+      <div className={styles.coverWrapper}>
+        <div className={styles.coverFrame}>
+          <div className={styles.spineHighlight} aria-hidden="true" />
+          {showCover ? (
+            <img
+              className={styles.cover}
+              src={coverUrl(jobId)}
+              alt={`Cover of ${title}`}
+              onError={() => setCoverFailed(true)}
+            />
+          ) : (
+            <div className={styles.plate} aria-hidden="true">
+              <div className={styles.plateInner}>
+                <span className={styles.plateIcon}>📖</span>
+                <span className={styles.plateText}>{initials(title)}</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className={styles.details}>
         <h2 className={styles.title}>{title}</h2>
-        {book.author && <p className={styles.author}>{book.author}</p>}
+        {book.author && (
+          <p className={styles.author}>
+            <span className={styles.authorBy}>by</span> {book.author}
+          </p>
+        )}
 
-        <p className={styles.languages}>
-          <span>{languageLabel(sourceLanguage)}</span>
+        <div className={styles.languages}>
+          <span className={styles.langPill}>{languageLabel(sourceLanguage)}</span>
           <span aria-hidden="true" className={styles.arrow}>
             →
           </span>
-          <span>{targetLanguage || 'English'}</span>
-        </p>
+          <span className={`${styles.langPill} ${styles.targetLangPill}`}>
+            {targetLanguage || 'English'}
+          </span>
+        </div>
 
         {children}
       </div>

@@ -5,28 +5,28 @@ export interface ChapterGroup {
   patch: number | null;
   chapters: Chapter[];
   /**
-   * False for a run of chapters belonging to a request already introduced
-   * further up the book, so the header appears once and later runs say so.
+   * False for a run of chapters belonging to a patch already introduced
+   * further up the book, so the header appears once and later runs go bare.
    */
   firstRun: boolean;
 }
 
 export interface ChapterPlan {
-  /** Runs of consecutive chapters that share a request, in book order. */
+  /** Runs of consecutive chapters that share a patch, in book order. */
   groups: ChapterGroup[];
-  /** Each request's real token cost. */
+  /** Each patch's real token cost. */
   totals: Map<number, number>;
-  /** Each request's chapter ids, for selecting all of them at once. */
+  /** Each patch's chapter ids, for selecting all of them at once. */
   members: Map<number, string[]>;
 }
 
 /**
- * The chapter list as it is drawn: grouped by request, plus each request's
+ * The chapter list as it is drawn: grouped by patch, plus each patch's
  * totals.
  *
  * The totals are gathered across the whole book rather than per run, because a
- * request's chapters are often split up by skipped ones in between — showing a
- * run's own tokens would understate what the request actually costs. `firstRun`
+ * patch's chapters are often split up by skipped ones in between — showing a
+ * run's own tokens would understate what the patch actually costs. `firstRun`
  * is worked out here for the same reason: it depends on the whole book so far,
  * not on the group in hand.
  */

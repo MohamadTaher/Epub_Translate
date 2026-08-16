@@ -26,11 +26,10 @@ class EpubWriter:
         self.book = source.book
         self.book.set_title(f"{source.title} (Translated)" if source.title else "Translated Book")
         self.book.set_language(language_to_code(target_language))
-        self.book.add_item(epub.EpubNcx())
-        self.book.add_item(epub.EpubNav())
+        _ensure_navigation(self.book)
 
         # The soup last written into each document. The book is saved after
-        # every batch, and a batch translates a handful of chapters, so without
+        # every patch, and a patch translates a handful of chapters, so without
         # this each save re-serializes the several hundred that did not change —
         # and does it holding the save lock.
         self._written: Dict[str, BeautifulSoup] = {}
@@ -58,6 +57,24 @@ class EpubWriter:
         ]
 
         epub.write_epub(output_path, self.book, {})
+
+
+def _ensure_navigation(book):
+    """
+    Give the book a table of contents and an NCX, unless it brought its own.
+
+    Adding them unconditionally is the obvious thing and it is wrong: a book that
+    already has them ends up with two manifest entries under one id and two zip
+    members under one name — `zipfile` says so on every save, `Duplicate name:
+    'EPUB/nav.xhtml'` — and duplicate ids make the EPUB invalid. Most EPUB3 books
+    have both already.
+    """
+    present = {type(item) for item in book.get_items()}
+
+    if epub.EpubNcx not in present:
+        book.add_item(epub.EpubNcx())
+    if epub.EpubNav not in present:
+        book.add_item(epub.EpubNav())
 
 
 def _as_html_document(soup: BeautifulSoup) -> BeautifulSoup:

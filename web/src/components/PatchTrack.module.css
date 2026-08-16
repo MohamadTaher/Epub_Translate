@@ -1,0 +1,97 @@
+.track {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.blocks {
+  display: flex;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* Blocks share the width evenly and are allowed to shrink to nothing, so a
+   forty-patch book stays one line rather than wrapping or overflowing. */
+.block {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 10px;
+  border-radius: var(--r-xs);
+  background: var(--paper-sunken);
+  border: 1px solid var(--rule);
+  transition:
+    background var(--dur-panel) var(--ease),
+    border-color var(--dur-panel) var(--ease);
+}
+
+/* At this width a 1px border is most of the block; the gap does the separating. */
+.dense {
+  gap: 2px;
+}
+
+.dense .block {
+  border-radius: 2px;
+  border-color: transparent;
+}
+
+.is-active {
+  background: var(--clay);
+  border-color: var(--clay-deep);
+  box-shadow: 0 0 6px var(--clay-glow);
+}
+
+.is-done {
+  background: var(--sage);
+  border-color: var(--sage-deep);
+}
+
+.is-failed {
+  background: var(--crimson);
+  border-color: var(--crimson-deep);
+}
+
+.block.is-active {
+  animation: patchPulse 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes patchPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block.is-active {
+    animation: none;
+  }
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  font-size: var(--fs-micro);
+  color: var(--ink-faint);
+}
+
+.key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.keyFailed {
+  color: var(--crimson);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 2px;
+}

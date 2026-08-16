@@ -2,6 +2,7 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .main {
@@ -9,7 +10,7 @@
   width: 100%;
   max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0 var(--s5);
+  padding: var(--s4) var(--s5) var(--s6);
 }
 
 .notice {
@@ -18,19 +19,30 @@
 
 .footer {
   border-top: 1px solid var(--rule);
-  margin-top: var(--s8);
+  margin-top: var(--s6);
+  background: color-mix(in srgb, var(--paper-sunken) 50%, transparent);
 }
 
-/* The inner block is what carries the reading measure; the outer one keeps the
-   text on the same left edge as the content above it. */
-.footer > div {
+.footerInner {
   max-width: var(--page-max);
   margin: 0 auto;
   padding: var(--s5);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s4);
+  flex-wrap: wrap;
 }
 
-.footer p {
+.footerText {
   max-width: var(--measure);
   font-size: var(--fs-xs);
   color: var(--ink-faint);
+  line-height: 1.5;
+}
+
+.footerBrand {
+  font-family: var(--font-book);
+  font-size: var(--fs-xs);
+  color: var(--ink-muted);
 }

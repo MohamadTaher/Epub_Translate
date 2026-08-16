@@ -2,26 +2,43 @@
 # so plain `docker compose up` runs the code in this directory rather than a copy
 # of it taken when the image was last built.
 #
-# To run what would actually be deployed — the image with the code baked in —
-# skip this file:
+# The address is <http://localhost:7860> either way. In development that port is
+# the Vite dev server, which forwards `/api` to the Python one over the compose
+# network and rebuilds the browser app itself, so a UI edit never needs
+# `npm run build` — the page updates on its own, and a refresh always works.
+#
+# To run what would actually be deployed — the image with the code baked in, and
+# uvicorn serving the built `web/dist` on that port — skip this file:
 #
 #   docker compose -f docker-compose.yml up --build
 #
-# The image is still needed for the things a bind mount can't provide: the
-# installed Python packages and the tokenizer fetched at build time. Rebuild it
-# only when those change (`requirements.txt`), not when code does.
 services:
   epub-translate:
+    # The dev server is what the browser talks to, so it takes the published
+    # port and this one is reached at `epub-translate:7860` inside the network.
+    # `!reset` because compose otherwise *appends* to the base file's ports, and
+    # two services cannot publish 7860 at once.
+    ports: !reset []
     volumes:
       # The working tree, over the copy baked into the image. `.env` is still
       # mounted read-only by the base file; a nested mount wins over this one.
       - .:/app
-    # Restarts on any .py change. Watching is limited to the two Python packages
-    # so a frontend build — which writes a few hundred files into web/dist —
-    # doesn't restart the server it is being served by.
-    #
-    # A reload drops jobs in flight: they live in one process's memory, so an
-    # edit mid-run ends that run. And if an edit ever stops being noticed, this
-    # host's file events are the reason; `WATCHFILES_FORCE_POLLING=true` in the
-    # environment makes watchfiles look for itself instead of being told.
     command: uvicorn server.app:app --host 0.0.0.0 --port 7860 --reload --reload-dir /app/epub_translate --reload-dir /app/server
+
+  web:
+    image: node:20-alpine
+    working_dir: /web
+    volumes:
+      - ./web:/web
+      # Anonymous volume: node_modules is installed for alpine in here and must
+      # not be shadowed by whatever the host has.
+      - /web/node_modules
+    ports:
+      # Same port inside and out, or the hot-reload socket the page opens back
+      # to Vite would be pointed at a port nothing is listening on.
+      - "7860:7860"
+    environment:
+      - API_TARGET=http://epub-translate:7860
+      # File events don't cross a Windows bind mount; see web/vite.config.ts.
+      - VITE_POLL=1
+    command: sh -c "npm install && npm run dev -- --host --port 7860 --strictPort"

@@ -66,7 +66,7 @@ export function describeOutcome(job: JobSnapshot): Notice | null {
         return {
           tone: 'info',
           title: 'Nothing to translate',
-          body: 'This run had no requests to send. Nothing in the book was left to translate.',
+          body: 'This run had no patches to send. Nothing in the book was left to translate.',
         };
       }
 
@@ -74,12 +74,12 @@ export function describeOutcome(job: JobSnapshot): Notice | null {
         ? {
             tone: 'warning',
             title: 'Finished, but not all of it',
-            body: `${job.completed} of ${job.total} requests were translated. The rest ran out of retries. The download holds everything that succeeded, with the untranslated chapters left in their original language.`,
+            body: `${job.completed} of ${job.total} patches were translated. The rest ran out of retries. The download holds everything that succeeded, with the untranslated chapters left in their original language.`,
           }
         : {
             tone: 'success',
             title: 'Translated',
-            body: 'Every request completed. The book is ready to download.',
+            body: 'Every patch completed. The book is ready to download.',
           };
     }
 
@@ -87,7 +87,7 @@ export function describeOutcome(job: JobSnapshot): Notice | null {
       return {
         tone: 'info',
         title: 'Stopped',
-        body: `You stopped this after ${job.completed} of ${job.total} requests. Everything finished up to that point is saved and downloadable.`,
+        body: `You stopped this after ${job.completed} of ${job.total} patches. Everything finished up to that point is saved and downloadable.`,
       };
 
     case 'failed':

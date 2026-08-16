@@ -1,7 +1,6 @@
 """Command-line entry point: argument parsing and wiring into EPUBTranslator."""
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -24,17 +23,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--glossary", help="Path to a glossary JSON file for term consistency. "
                                            "Terms learned during the run are merged back into it")
 
-    # The pacing defaults come from .env, the same file the server reads, so one
-    # book runs at one speed however it is started. A flag still wins over .env.
+    # The pacing defaults come from settings.env, the same file the server
+    # reads, so one book runs at one speed however it is started. A flag still
+    # wins over the file.
     parser.add_argument("--model", default=defaults.GEMINI_MODEL,
-                        help=f"Gemini model name, or set GEMINI_MODEL in .env (default: {defaults.GEMINI_MODEL})")
+                        help=f"Gemini model name, or set GEMINI_MODEL in settings.env (default: {defaults.GEMINI_MODEL})")
     parser.add_argument("--requests-per-minute", type=int, default=defaults.REQUESTS_PER_MINUTE,
-                        help="API request rate limit, which is also how many patches run at a time, "
-                             f"or set REQUESTS_PER_MINUTE in .env (default: {defaults.REQUESTS_PER_MINUTE})")
+                        help="API request rate limit, which is also how many run at a time, "
+                             f"or set REQUESTS_PER_MINUTE in settings.env (default: {defaults.REQUESTS_PER_MINUTE})")
     parser.add_argument("--tokens-per-minute", type=int, default=defaults.TOKENS_PER_MINUTE,
-                        help=f"API token rate limit, or set TOKENS_PER_MINUTE in .env (default: {defaults.TOKENS_PER_MINUTE:,})")
+                        help=f"API token rate limit, or set TOKENS_PER_MINUTE in settings.env (default: {defaults.TOKENS_PER_MINUTE:,})")
     parser.add_argument("--tokens-per-request", type=int, default=defaults.TOKENS_PER_REQUEST,
-                        help=f"Max tokens per translation batch, or set TOKENS_PER_REQUEST in .env (default: {defaults.TOKENS_PER_REQUEST:,})")
+                        help=f"Max tokens per translation request, or set TOKENS_PER_REQUEST in settings.env (default: {defaults.TOKENS_PER_REQUEST:,})")
     return parser
 
 
@@ -42,15 +42,14 @@ def main(argv=None):
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        logger.error("GEMINI_API_KEY environment variable is not set.")
+    if not defaults.GEMINI_API_KEY:
+        logger.error("GEMINI_API_KEY is not set. Put it in .env or in the environment.")
         sys.exit(1)
 
     output_path = args.output or _default_output_path(args.input)
 
     translator = EPUBTranslator(
-        api_key=api_key,
+        api_key=defaults.GEMINI_API_KEY,
         source_language=args.source_lang,
         target_language=args.target_lang,
         glossary_file_path=args.glossary,

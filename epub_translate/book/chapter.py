@@ -17,7 +17,7 @@ class Chapter:
 
     `eq=False` keeps identity equality and hashing. A chapter is a position in
     one book rather than a value worth comparing to another, and the server maps
-    a chapter back to the request carrying it by `id()`.
+    a chapter back to the patch carrying it by `id()`.
     """
 
     id: str

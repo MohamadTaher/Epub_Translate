@@ -51,18 +51,18 @@ def split_translation(response_text: str) -> Tuple[str, Dict[str, str]]:
 
 def _new_terms_section(has_known_terms: bool) -> str:
     """
-    The request for the terms this batch introduced.
+    The request for the terms this patch introduced.
 
     Being new is the request itself, not a condition tacked on after it: asked
     for every term in the chapters and then told to leave out the settled ones,
     a model returns the settled ones anyway. They cost output tokens on every
-    request of the run and are thrown away on arrival, since a term's first
+    patch of the run and are thrown away on arrival, since a term's first
     translation is the one that stands.
 
     The exclusion is dropped entirely when nothing has been settled yet, because
     there is no list above for it to point at.
 
-    One gap this cannot close: only the terms this batch mentions are listed
+    One gap this cannot close: only the terms this patch mentions are listed
     above (see `Glossary.prompt_section`), so a name settled in chapter 2 and
     absent from these chapters is not something the model has been shown, and
     coming back with it is not disobedience. `merge` drops it either way.

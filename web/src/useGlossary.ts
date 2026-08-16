@@ -31,9 +31,9 @@ const toRows = (terms: Glossary): GlossaryRow[] =>
  * The glossary is no longer only what the reader typed: a run adds the terms
  * each response reports, so the server's copy moves while this one sits still.
  * Every write therefore takes in what has been learned since (see `persist`),
- * and `finished` pulls the final list down once the run is over.
+ * and `revision` pulls the list down again each time the run has learned more.
  */
-export function useGlossary(jobId: string | null, finished = false) {
+export function useGlossary(jobId: string | null, revision = 0) {
   const [rows, setRows] = useState<GlossaryRow[]>([]);
   const [saved, setSaved] = useState<Glossary>({});
   const [saving, setSaving] = useState(false);
@@ -67,17 +67,21 @@ export function useGlossary(jobId: string | null, finished = false) {
   const terms = toTerms(rows);
   const dirty = JSON.stringify(terms) !== JSON.stringify(saved);
 
-  // Read by the effect below without making it depend on every keystroke.
+  // Read by the effect below without making it depend on every keystroke. A row
+  // with a blank source is one being typed rather than a term, so `toTerms`
+  // drops it and `dirty` never sees it — but a refresh would still take it away.
   const editing = useRef(false);
+  const busy = dirty || rows.some((row) => !row.from.trim());
   useEffect(() => {
-    editing.current = dirty;
-  }, [dirty]);
+    editing.current = busy;
+  }, [busy]);
 
-  // A finished run has usually learned terms this list has never seen. Fetch
-  // them, unless the reader is midway through editing — their work outranks a
-  // tidier list.
+  // A run learns terms as it goes and writes them to the server's copy, so this
+  // list is stale the moment a patch lands. `revision` moves with each one, and
+  // once more when the run ends. Fetch what the book has taught itself, unless
+  // the reader is midway through editing — their work outranks a tidier list.
   useEffect(() => {
-    if (!jobId || !finished || editing.current) return;
+    if (!jobId || !revision || editing.current) return;
 
     let cancelled = false;
     getGlossary(jobId)
@@ -91,7 +95,7 @@ export function useGlossary(jobId: string | null, finished = false) {
     return () => {
       cancelled = true;
     };
-  }, [jobId, finished]);
+  }, [jobId, revision]);
 
   const add = useCallback(() => setRows((current) => [...current, makeRow('', '')]), []);
 

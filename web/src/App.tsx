@@ -52,9 +52,13 @@ export default function App() {
   const { preview, previewing, reset: resetPreview } = usePreview(job, selectionList, touched);
 
   // Held here rather than in either panel: both render the editor, in different
-  // subtrees, so starting a run would otherwise throw away unsaved edits. Once a
-  // run is over it is told so, to pick up the terms the book taught itself.
-  const glossary = useGlossary(job?.id ?? null, job !== null && TERMINAL.includes(job.status));
+  // subtrees, so starting a run would otherwise throw away unsaved edits.
+  //
+  // Every patch may have taught the book a name, and each one is written to the
+  // server's glossary as it lands — so the count moves with the run, and the
+  // editor re-reads it each time rather than only at the end.
+  const finished = job !== null && TERMINAL.includes(job.status);
+  const glossary = useGlossary(job?.id ?? null, stream.completed + (finished ? 1 : 0));
 
   // The terminal `end` event carries the final snapshot; take it, and refresh the
   // budget, which the run has been spending the whole time.
@@ -214,11 +218,12 @@ export default function App() {
       </main>
 
       <footer className={styles.footer}>
-        <div>
-          <p>
-            The API key stays on the server — books are translated here, not in your browser.
-            Uploads are deleted an hour after they finish.
+        <div className={styles.footerInner}>
+          <p className={styles.footerText}>
+            🔒 The API key stays safely on the server — books are translated with Gemini, not in your browser.
+            Uploads are kept temporarily and automatically deleted after one hour.
           </p>
+          <span className={styles.footerBrand}>EPUB Translate · Literary Edition</span>
         </div>
       </footer>
     </div>

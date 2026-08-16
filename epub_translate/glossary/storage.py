@@ -43,7 +43,7 @@ def _validated(data) -> Dict[str, str]:
 
     Anything else is refused here, where the file is named and the problem can
     be explained. Left to be discovered later it would raise inside a worker,
-    which retries ten times before giving up on the batch.
+    which retries ten times before giving up on the patch.
     """
     if not isinstance(data, dict):
         raise ValueError(
