@@ -206,6 +206,24 @@ objects every call, because a run mutates them.
 produces a duplicate manifest id and a duplicate zip member on every save, which
 `zipfile` warns about and strict readers reject. Most EPUB3 books arrive with both.
 
+Two more things ebooklib does that the writer has to undo, both of which look like
+setup nobody needs:
+
+- **`set_title` and `set_language` add rather than replace.** Without the
+  `_forget_metadata` calls in front of them the package document declares the
+  original title and language *first*, and a reader shows the first — so a finished
+  translation presents itself as the book it was translated from.
+- **ebooklib does not write the document it was given; it rebuilds one**, and that
+  rebuild's `<head>` holds `item.title` and `item.links` and nothing else. Reading a
+  book fills in neither, so `_keep_document_heads` copies each head across before the
+  first chapter is replaced. Drop it and every chapter loses its `<title>` and its
+  `<link>` to the book's stylesheet, which stays in the archive with nothing pointing
+  at it — the translation renders unstyled, and nothing fails.
+
+The save itself goes to a temporary file and is **renamed into place**
+(`_write_in_one_move`), because `/download` serves that same path while the run
+writing it is still going.
+
 `/preview` packs the token counts already cached on the plan through the same
 `pack_by_tokens` that `/start` uses, so the two always agree. Don't reimplement the
 packing rule anywhere else. It renders through `Job.stats(plan)`, passing its own
@@ -215,7 +233,10 @@ old plan back over the one the run then executed.
 
 Progress arrives only over the SSE stream — a run outlives any single request. The
 book is re-saved after every patch, so `/download` returns a valid partial EPUB at any
-point. Every connection replays the job's whole event log before going live, so
+point — which is why it reads the file itself rather than answering with a
+`FileResponse`. That measures the file and then opens it, and a save landing between
+the two sends a length the file it opens no longer has, so the download dies part-way
+through. Every connection replays the job's whole event log before going live, so
 reconnecting loses nothing but duplicates everything. Rate-limiter waits emit
 `rate_limit_wait` / `rate_limit_done`; without them the UI can't tell waiting from
 hung.
@@ -328,16 +349,24 @@ work untouched. `CMD` is shell form on purpose — the variable has to expand at
 before killing an instance. Docker lints shell-form `CMD` as a signal hazard; the
 `exec` is the answer, so don't "fix" it to JSON form.
 
-Three deploy flags in `README.md` are load-bearing, all because this app does its work
-*after* answering the request:
+Deploys are continuous from GitHub: a merge into `main` builds and rolls out a new
+revision, so `main` is the live demo. The build must stay on the **Dockerfile**, not
+buildpacks — buildpacks read `requirements.txt`, build the Python app alone and skip
+`web/` entirely, which yields a green build serving an API with no frontend.
 
-- `--no-cpu-throttling`, or the background translation thread loses the CPU as soon as
-  `/start` returns.
-- `--max-instances 1`, because jobs live in one process's memory and session affinity
-  is best-effort. Nothing may assume a second instance can serve the same job unless
-  job state moves out of memory first.
-- `--timeout 3600`, the ceiling on the SSE stream, which is a single long request.
-  60 minutes is Cloud Run's maximum, not a choice.
+Three service settings listed in `README.md` are load-bearing, all because this app
+does its work *after* answering the request:
+
+- **CPU always allocated**, or the background translation thread loses the CPU as soon
+  as `/start` returns.
+- **Maximum instances of 1**, because jobs live in one process's memory and session
+  affinity is best-effort. Nothing may assume a second instance can serve the same job
+  unless job state moves out of memory first.
+- **A 3600-second request timeout**, the ceiling on the SSE stream, which is a single
+  long request. 60 minutes is Cloud Run's maximum, not a choice.
+
+They live on the service, not in the repo, so a new revision inherits them and nothing
+in a commit can set them.
 
 `DATA_DIR` is overridden to `/tmp/epub_translate` there — the Cloud Run filesystem is
 in memory, so uploads are charged twice, once as files and once as RAM.

@@ -103,32 +103,25 @@ Any host that can run the Docker image will do. Set `GEMINI_API_KEY` in the host
 
 #### Cloud Run
 
-```
-gcloud run deploy epub-translate \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --no-cpu-throttling \
-  --max-instances 1 \
-  --timeout 3600 \
-  --memory 1Gi \
-  --set-env-vars GEMINI_API_KEY=your-key-here,GEMINI_MODEL=gemini-3.5-flash-lite,DATA_DIR=/tmp/epub_translate
-```
+Deployment is continuous from GitHub. In the Cloud Run console choose **Continuously deploy from a repository**, connect this repo and set the branch to `main`. Every merge into `main` builds and rolls out a new revision, which makes `main` the live demo — work on a branch and merge once it is ready.
 
-The first run offers to enable the Cloud Run, Cloud Build and Artifact Registry APIs; the upload respects `.gitignore`, so `node_modules` and `web/dist` stay out of it.
+When it asks how to build, choose **Dockerfile**, not buildpacks. Buildpacks infer the language from `requirements.txt`, build the Python app alone and never run the `web/` build. The result is a working API serving no frontend, and because the build itself succeeds, nothing announces the problem.
 
-Cloud Run assumes a service's work happens inside a request, and most of this one's happens after the request has been answered. Four of those flags are what bridge that:
+The rest is set once on the service. These are properties of the service rather than of the repo, so every later deployment inherits them:
 
-| Flag | Why it is there |
-|---|---|
-| `--no-cpu-throttling` | Translation runs on a background thread after `/start` has returned. By default Cloud Run takes the CPU away the moment a request finishes, which would leave the run frozen mid-book. |
-| `--max-instances 1` | Jobs live in one container's memory, and Cloud Run's session affinity is best-effort. A second instance would answer with jobs it has never heard of. |
-| `--timeout 3600` | The progress stream is one long-lived request. The five-minute default would sever it repeatedly; 60 minutes is the most Cloud Run allows. |
-| `DATA_DIR=/tmp/epub_translate` | `/tmp` is writable on every Cloud Run instance. The image points this at `/data`, which is where compose mounts a volume instead. |
+| Setting | Value | Why it is there |
+|---|---|---|
+| CPU allocation | always allocated | Translation runs on a background thread after `/start` has returned. Allocating CPU only during requests would leave the run frozen mid-book. |
+| Maximum instances | `1` | Jobs live in one container's memory, and Cloud Run's session affinity is best-effort. A second instance would answer with jobs it has never heard of. |
+| Request timeout | `3600` | The progress stream is one long-lived request. The five-minute default would sever it repeatedly; 60 minutes is the most Cloud Run allows. |
+| Memory | `1 GiB` | The filesystem is in memory, so an upload is charged twice over — once as a file, once as RAM. |
+| Authentication | allow unauthenticated | It is a public demo. |
 
-No port flag is needed: Cloud Run sets `PORT` and the container listens on it, falling back to 7860 everywhere else.
+Environment variables are set there too: `GEMINI_API_KEY`, `GEMINI_MODEL`, and `DATA_DIR=/tmp/epub_translate`, `/tmp` being the path guaranteed writable on any instance. The image points `DATA_DIR` at `/data` instead, which is where compose mounts its volume.
 
-Redeploying is `gcloud run deploy epub-translate --source .` by itself — settings already on the service are kept.
+`.env` and `settings.env` are gitignored, so neither exists in the clone Cloud Build works from. That is why a deployment configures itself with environment variables rather than files.
+
+No port needs configuring: Cloud Run sets `PORT` and the container listens on it, falling back to 7860 everywhere else.
 
 Because the key belongs to whoever deploys it, every visitor spends the owner's money. These limits bound that. They are the contents of `settings.env`, which is not part of the image — a deployment has no file to edit, so it sets them as environment variables instead:
 

@@ -11,9 +11,10 @@ import queue
 import threading
 import time
 from typing import Dict, List, Optional
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -252,16 +253,40 @@ def download(job_id: str):
 
     Valid mid-run too: the book is rewritten in full after every patch, so this
     returns a readable EPUB containing everything finished so far.
+
+    Read here rather than served as a `FileResponse`, which measures the file
+    and then opens it: a save landing between those two — and one lands after
+    every patch — sends a length the file it then opens no longer has, and the
+    download dies part-way. Reading it holds one version of the book from first
+    byte to last. A book is at most `MAX_UPLOAD_MB`, and an upload is already
+    held whole in memory on the way in.
     """
     job = _require_job(job_id)
-    if not job.output_path.exists():
+
+    try:
+        book = job.output_path.read_bytes()
+    except OSError:
         raise HTTPException(status_code=404, detail="Nothing has been translated yet.")
 
-    return FileResponse(
-        job.output_path,
+    return Response(
+        book,
         media_type="application/epub+zip",
-        filename=job.download_name,
+        headers={'Content-Disposition': _attachment(job.download_name)},
     )
+
+
+def _attachment(filename: str) -> str:
+    """
+    A `Content-Disposition` naming the download.
+
+    Book titles are not ASCII, and a name that needs escaping has to be sent
+    RFC 5987-encoded instead of quoted — the same rule Starlette applies, spelled
+    out here because the response above is no longer one of its file responses.
+    """
+    encoded = quote(filename)
+    if encoded == filename:
+        return f'attachment; filename="{filename}"'
+    return f"attachment; filename*=utf-8''{encoded}"
 
 
 @app.get("/api/jobs/{job_id}/glossary")
