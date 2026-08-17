@@ -25,6 +25,11 @@ COPY server/ ./server/
 COPY translate_epub.py .
 COPY --from=web /web/dist ./web/dist
 
+# Configuration rather than a secret — the key lives in `.env`, which never
+# enters the image. Copied last so editing a setting rebuilds only this layer,
+# and left where `settings_file.py` looks for it, next to the application.
+COPY settings.env .
+
 # Uploads and the budget database.
 ENV DATA_DIR=/data
 RUN mkdir -p /data

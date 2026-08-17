@@ -73,8 +73,10 @@ Don't reach for `os.environ["GEMINI_API_KEY"]` directly: it is only populated on
 
 Precedence is `settings.env` → environment → built-in default, which is the reverse of
 `.env`. The file has to win or editing it would do nothing whenever a stale copy of the
-same key was left in `.env`. Cloud Run has no `settings.env` — the Dockerfile copies
-four paths and that is not one of them — so up there the environment carries it.
+same key was left in `.env`. The Dockerfile copies `settings.env` in, so that holds
+when deployed too: an environment variable set on a Cloud Run service, for a name the
+file mentions, is silently ignored. Retuning a deployed server is an edit to the file
+and a push, never a console change.
 
 `MAX_TRANSLATIONS_AT_ONCE` is the one setting that is only half live: the admission
 gate in `app.py` reads it per request, but it also sized the `ThreadPoolExecutor` in

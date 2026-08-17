@@ -42,8 +42,9 @@ def _current() -> Dict[str, str]:
         info = SETTINGS_FILE.stat()
         stamp: Optional[Tuple[int, int]] = (info.st_mtime_ns, info.st_size)
     except OSError:
-        # No file at all is the normal deployed case: nothing is bind-mounted
-        # there, and Cloud Run is configured by environment variable instead.
+        # Every setting falls back to its default. The file is committed and the
+        # image carries a copy, so this is the unusual path rather than the
+        # deployed one.
         stamp = None
 
     if stamp != _stamp:
@@ -70,9 +71,11 @@ def text(name: str, default: str) -> str:
     A setting, as of this call.
 
     The file wins over the environment, rather than the other way around like
-    `.env` does. An environment variable is what configures a deployment that
-    has no file to edit, and it cannot be changed without a restart anyway; the
-    file is the one being edited, so it has to be the one that takes effect.
+    `.env` does. The file is the one being edited — over a bind mount locally,
+    by rebuilding the image when deployed — so it has to be the one that takes
+    effect. An environment variable is the fallback for a setting the file says
+    nothing about, which means setting one for a name the file *does* mention
+    has no effect.
     """
     value = _current().get(name, "").strip()
     if value:

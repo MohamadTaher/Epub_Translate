@@ -47,10 +47,12 @@ practice:
 | `MAX_TRANSLATIONS_AT_ONCE` | at once when lowered. Raising it accepts more uploads, but the thread pool was sized at startup, so the extra runs queue until a restart |
 
 `settings.env` wins over an environment variable of the same name, which is the
-reverse of how `.env` works. An environment variable is how a deployment with no file
-to edit gets configured — Cloud Run, where nothing is mounted — and it cannot be
-changed without a restart anyway; the file is the one being edited, so it takes
-precedence. `settings.env` is gitignored and, like `.env`, never enters the image.
+reverse of how `.env` works. The file is the one being edited, so it takes precedence;
+an environment variable is only the fallback for a setting the file says nothing
+about, which means setting one for a name the file *does* mention has no effect at
+all. `settings.env` is committed and copied into the image — it is configuration
+rather than a secret. `.env` is the secret, and it is gitignored and never enters the
+image.
 
 **Neither file ever needs a rebuild.** `.env` needs a restart of the Python service —
 the dev server does not read it:
@@ -117,13 +119,16 @@ The rest is set once on the service. These are properties of the service rather 
 | Memory | `1 GiB` | The filesystem is in memory, so an upload is charged twice over — once as a file, once as RAM. |
 | Authentication | allow unauthenticated | It is a public demo. |
 
-Environment variables are set there too: `GEMINI_API_KEY`, `GEMINI_MODEL`, and `DATA_DIR=/tmp/epub_translate`, `/tmp` being the path guaranteed writable on any instance. The image points `DATA_DIR` at `/data` instead, which is where compose mounts its volume.
+Only two values are set on the service itself:
 
-`.env` and `settings.env` are gitignored, so neither exists in the clone Cloud Build works from. That is why a deployment configures itself with environment variables rather than files.
+- **`GEMINI_API_KEY`**, referenced from Secret Manager rather than typed as a plain variable. It is the one value here that is a secret, and `.env` never enters the image.
+- **`DATA_DIR=/tmp/epub_translate`** as a plain environment variable, `/tmp` being the path guaranteed writable on any instance. The image points `DATA_DIR` at `/data` instead, which is where compose mounts its volume.
+
+Everything else travels in the image. `settings.env` is committed and copied in, so the deployed model, pace and spend ceilings are whatever that file said when the image was built. Setting any of *those* names as an environment variable on the service does nothing — the file wins over the environment, by design.
 
 No port needs configuring: Cloud Run sets `PORT` and the container listens on it, falling back to 7860 everywhere else.
 
-Because the key belongs to whoever deploys it, every visitor spends the owner's money. These limits bound that. They are the contents of `settings.env`, which is not part of the image — a deployment has no file to edit, so it sets them as environment variables instead:
+Because the key belongs to whoever deploys it, every visitor spends the owner's money. These limits bound that, and they are the contents of `settings.env`:
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -146,9 +151,10 @@ the owner's quota has no business tuning it:
 tens of seconds, so a worker pool larger than the per-minute allowance would
 only park threads inside the rate limiter.
 
-Changing any of them on a deployed service is a `gcloud run services update
---update-env-vars` and a new revision, because there is no `settings.env` up there to
-re-read. Locally, the file is the faster path.
+Changing any of them on a deployed service is an edit to `settings.env` and a push:
+the build carries the new file, and the revision that replaces the old one starts on
+those values. Locally the same edit is live on the next request, with no restart and
+no rebuild.
 
 ### Local development
 
